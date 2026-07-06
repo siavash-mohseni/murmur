@@ -1,0 +1,146 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Catalyst-inspired dark palette. zinc-950 base, zinc-900 cards. */
+    --background: 240 6% 6%;            /* near zinc-950 */
+    --foreground: 0 0% 98%;
+    --card: 240 5% 9%;                  /* zinc-900-ish */
+    --card-foreground: 0 0% 98%;
+    --primary: 217 91% 60%;             /* blue-500 */
+    --primary-foreground: 0 0% 100%;
+    --secondary: 240 4% 14%;            /* zinc-800 */
+    --secondary-foreground: 0 0% 98%;
+    --muted: 240 4% 14%;
+    --muted-foreground: 240 5% 65%;     /* zinc-400 */
+    --accent: 240 4% 14%;
+    --accent-foreground: 0 0% 98%;
+    --destructive: 350 89% 60%;         /* rose-500 */
+    --destructive-foreground: 0 0% 100%;
+    --border: 240 4% 17%;               /* zinc-800/700 */
+    --input: 240 4% 17%;
+    --ring: 217 91% 60%;
+    --radius: 0.75rem;
+  }
+
+  html, body, #root {
+    background: hsl(var(--background));
+    background-image:
+      radial-gradient(1000px 600px at 100% -20%, hsl(240 30% 14% / 0.6) 0%, transparent 60%),
+      radial-gradient(800px 500px at -10% 110%, hsl(220 50% 14% / 0.5) 0%, transparent 55%);
+    background-attachment: fixed;
+    min-height: 100vh;
+    color: hsl(var(--foreground));
+  }
+
+  body {
+    @apply text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1;
+    -webkit-font-smoothing: antialiased;
+  }
+}
+
+@layer components {
+  .kpi-tile {
+    @apply rounded-xl border border-white/5 bg-white/[0.03] p-5 backdrop-blur-sm;
+  }
+  .kpi-label {
+    @apply text-sm font-medium text-zinc-400;
+  }
+  .kpi-number {
+    @apply mt-2 text-3xl font-semibold tracking-tight text-zinc-50 tabular-nums;
+  }
+  .kpi-chart {
+    @apply flex items-center justify-center self-stretch text-zinc-300;
+  }
+  .delta-up {
+    @apply inline-flex items-center rounded-md bg-emerald-500/15 px-1.5 py-0.5 text-xs font-medium text-emerald-300 ring-1 ring-inset ring-emerald-500/30;
+  }
+  .delta-down {
+    @apply inline-flex items-center rounded-md bg-rose-500/15 px-1.5 py-0.5 text-xs font-medium text-rose-300 ring-1 ring-inset ring-rose-500/30;
+  }
+  .delta-neutral {
+    @apply inline-flex items-center rounded-md bg-zinc-500/15 px-1.5 py-0.5 text-xs font-medium text-zinc-300 ring-1 ring-inset ring-zinc-500/30;
+  }
+  .panel {
+    @apply rounded-xl border border-white/5 bg-white/[0.02];
+  }
+  .panel-header {
+    @apply flex items-center justify-between gap-3 border-b border-white/5 px-5 py-3.5;
+  }
+  .tbl-row {
+    @apply flex items-start gap-4 border-b border-white/5 px-5 py-3 text-sm last:border-b-0 hover:bg-white/[0.02];
+  }
+  .tbl-head {
+    @apply flex items-center gap-4 px-5 py-2.5 text-[11px] uppercase tracking-wider text-zinc-500 border-b border-white/5;
+  }
+  .avatar-blob {
+    @apply flex h-7 w-7 shrink-0 items-center justify-center rounded-md ring-1 ring-inset;
+  }
+  .period-pill {
+    @apply inline-flex items-center gap-2 rounded-md border border-white/10 bg-white/[0.03] px-3 py-1.5 text-sm text-zinc-300 hover:bg-white/[0.06];
+  }
+  .icon-pill {
+    @apply inline-flex h-8 w-8 items-center justify-center rounded-md border border-white/10 bg-white/[0.03] text-zinc-300 hover:bg-white/[0.06];
+  }
+}
+
+/* Owner hero motion. All of it is procedural (no art assets) and all of it is
+   disabled under prefers-reduced-motion at the bottom of this block. */
+
+/* The activity heartbeat scrolls a tiling waveform leftward by exactly one tile
+   (-50% of the doubled track) for a seamless loop. Speed is set inline from the
+   live activity rate. */
+@keyframes hb-scroll {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+.hb-scroll {
+  animation: hb-scroll var(--hb-dur, 2.4s) linear infinite;
+}
+
+/* Status changes fade and rise in instead of snapping. Keyed on the status kind
+   so it replays only when the state actually changes. */
+@keyframes owner-rise {
+  from {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.owner-rise {
+  animation: owner-rise 360ms ease-out both;
+}
+
+/* One-shot confetti for the transition into "done". Each piece carries its own
+   drift, rotation, and duration via inline custom properties. */
+@keyframes confetti-fall {
+  from {
+    transform: translate3d(0, -8px, 0) rotate(0deg);
+    opacity: 1;
+  }
+  to {
+    transform: translate3d(var(--cf-dx, 0px), var(--cf-dy, 130px), 0) rotate(var(--cf-rot, 360deg));
+    opacity: 0;
+  }
+}
+.confetti-piece {
+  animation: confetti-fall var(--cf-dur, 1.3s) cubic-bezier(0.2, 0.6, 0.4, 1) var(--cf-delay, 0s) forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hb-scroll,
+  .owner-rise,
+  .confetti-piece {
+    animation: none !important;
+  }
+}

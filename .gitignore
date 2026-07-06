@@ -1,0 +1,12 @@
+node_modules/
+dist/
+web/node_modules/
+web/dist/
+*.log
+
+# OS / editor cruft
+.DS_Store
+
+# Local machine state that must never be committed
+.claude/
+*.bak

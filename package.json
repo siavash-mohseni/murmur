@@ -1,0 +1,44 @@
+{
+  "name": "murmur-mcp",
+  "version": "0.2.0",
+  "description": "Murmur: a pager and live dashboard for Claude Code agents. Know the moment a session needs you.",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "murmur-mcp": "dist/index.js",
+    "murmur-mcp-install": "dist/setup.js",
+    "murmur-mcp-uninstall": "dist/uninstall.js",
+    "murmur-export": "dist/export-cli.js",
+    "murmur-relay": "dist/relay.js"
+  },
+  "files": [
+    "dist",
+    "!dist/native",
+    "hooks",
+    "skills",
+    "claude-md",
+    "native-alert",
+    "scripts/build-native.sh",
+    "scripts/mirror-hook-smoke.mjs"
+  ],
+  "workspaces": ["web"],
+  "scripts": {
+    "build": "bun run build:web && tsdown",
+    "build:web": "cd web && bun run build",
+    "build:native": "bash scripts/build-native.sh",
+    "setup": "bun install && bun run build && bun scripts/setup.ts",
+    "uninstall:murmur": "bun scripts/uninstall.ts",
+    "doctor": "bun scripts/setup.ts --doctor",
+    "dev": "bun src/index.ts --port 5173",
+    "start": "node dist/index.js --port 5173",
+    "smoke": "bun scripts/smoke.ts"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0"
+  },
+  "devDependencies": {
+    "tsdown": "^0.15.9",
+    "typescript": "^5.6.0",
+    "@types/node": "^22.0.0"
+  }
+}
