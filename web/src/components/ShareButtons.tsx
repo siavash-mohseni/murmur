@@ -2,6 +2,7 @@ import { useCallback } from "react";
 import { Download, Sparkles } from "lucide-react";
 import { buildExportHtml } from "@/lib/export-html";
 import { buildSummaryHtml } from "@/lib/summary-html";
+import { redactShareContext } from "@/lib/redact";
 import type { ShareContext } from "@/lib/share-context";
 
 // Open an HTML string in a new tab. Falls back to a download if the popup
@@ -42,12 +43,21 @@ export function stamp(): string {
 export function ShareButtons({ ctx }: { ctx: ShareContext }): React.JSX.Element {
   const shortId = (): string => ctx.state?.sessionId.slice(0, 8) ?? "snapshot";
 
+  // Share artifacts leave the machine, so they always go out redacted. The
+  // unredacted form stays reachable via murmur-export --no-redact or
+  // /export/<key>.html?redact=0.
   const onSummary = useCallback(() => {
-    openHtmlInNewTab(buildSummaryHtml(ctx), `murmur-summary-${shortId()}-${stamp()}.html`);
+    openHtmlInNewTab(
+      buildSummaryHtml(redactShareContext(ctx)),
+      `murmur-summary-${shortId()}-${stamp()}.html`
+    );
   }, [ctx]);
 
   const onExport = useCallback(() => {
-    downloadHtml(buildExportHtml(ctx), `claude-session-${shortId()}-${stamp()}.html`);
+    downloadHtml(
+      buildExportHtml(redactShareContext(ctx)),
+      `claude-session-${shortId()}-${stamp()}.html`
+    );
   }, [ctx]);
 
   return (

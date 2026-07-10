@@ -13,6 +13,8 @@
 //   murmur-export <key> --receipt --pr <n> target a specific PR number
 //   murmur-export <key> --share [--ttl d]  hosted replay: upload to the relay
 //                                          (MURMUR_RELAY), get an expiring link
+//   murmur-export <key> --no-redact        keep emails, keys, usernames, and
+//                                          other PII the export scrubs by default
 //
 // Everything the document needs (styles, icons, transcript images) is inlined,
 // so the file can be attached, gisted, or opened years later as-is.
@@ -99,7 +101,7 @@ async function resolveKey(prefix: string): Promise<PastSessionSummary> {
 }
 
 function renderOrDie(key: string): string {
-  const html = renderSessionHtml(key, kind);
+  const html = renderSessionHtml(key, kind, { redact: !flags.has("--no-redact") });
   if (html === null) fail(`could not read state for session ${key}`);
   return html;
 }

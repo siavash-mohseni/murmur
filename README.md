@@ -191,6 +191,8 @@ The same documents render server-side from persisted state, so past sessions exp
 
 **PR receipts.** `murmur-export <key> --receipt` turns a session into a receipt on the pull request it produced: the summary goes into a secret gist (visible to whoever has the link, which is who can read the PR), and a marker-guarded line is appended to the PR body with the gist and a one-click preview. Re-running replaces the previous receipt instead of stacking duplicates. `--pr <n>` targets a specific PR, `--no-pr` skips the append. Needs the GitHub CLI (`gh`). The receipt carries the full trace, including every permission decision, so a reviewer can see not just the diff but how it was made.
 
+**PII redaction.** Every document that leaves the machine is anonymized by default: exports, receipts, hosted replays, and the browser share buttons all scrub emails, API keys and tokens (Anthropic, OpenAI, GitHub, Slack, AWS, Google, JWTs, bearer headers, `password=`/`api_key=` style assignments), home-directory usernames (`/Users/jane` becomes `/Users/USER`, including the bare name and its `-Users-jane-` project-slug form), non-loopback IPv4 addresses, and Luhn-valid card numbers. The rules are conservative on purpose so code, diffs, git SHAs, UUIDs, and timestamps come through untouched, and they cover text only: screenshots inlined in the transcript are not scrubbed, and phone numbers are left alone because diff lines starting with `+` look identical to them. The live dashboard itself is never redacted (it is your own machine). To export full fidelity, pass `--no-redact` to the CLI or `?redact=0` to `/export/<key>.html`.
+
 ## MCP tools
 
 Murmur exposes five tools. In normal use you only call `murmur_open` and `murmur_ask` directly. The hooks and the skill drive the rest.
@@ -295,6 +297,7 @@ node scripts/hook-paths-smoke.mjs    # question/permission blocking paths
 node scripts/hub-smoke.mjs           # hub, fleet, proxy, watcher relay
 node scripts/pager-smoke.mjs         # token gate, pairing, Web Push round trip
 node scripts/export-smoke.mjs        # export CLI, server routes, image inlining
+bun scripts/redact-smoke.ts          # PII redaction rules and share-context walk
 node scripts/relay-smoke.mjs         # tunnel chain, hijack rejection, replays
 node scripts/make-icons.mjs          # regenerate the PWA icon set
 ```

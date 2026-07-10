@@ -4,6 +4,7 @@ import type { DashboardState } from "@/hooks/useDashboardState";
 import { downloadHtml, openHtmlInNewTab, stamp } from "@/components/ShareButtons";
 import { buildExportHtml } from "@/lib/export-html";
 import { buildSummaryHtml } from "@/lib/summary-html";
+import { redactShareContext } from "@/lib/redact";
 import { formatCost } from "@/lib/cost";
 import { formatLocalTime } from "@/lib/format";
 
@@ -268,7 +269,7 @@ function PastSessionRow({
         },
       ];
       openHtmlInNewTab(
-        buildSummaryHtml({ state, sessions: synthetic }),
+        buildSummaryHtml(redactShareContext({ state, sessions: synthetic })),
         `murmur-summary-${shortId(s)}-${stamp()}.html`
       );
     } finally {
@@ -283,7 +284,7 @@ function PastSessionRow({
       const state = await fetchState();
       if (!state) return;
       downloadHtml(
-        buildExportHtml({ state, sessions: [] }),
+        buildExportHtml(redactShareContext({ state, sessions: [] })),
         `claude-session-${shortId(s)}-${stamp()}.html`
       );
     } finally {

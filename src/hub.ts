@@ -717,13 +717,18 @@ async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
   }
   // Self-contained session export from persisted state (works for past
   // sessions and for live ones, whose stores persist on a short debounce).
+  // PII redaction is on by default, ?redact=0 opts out.
   if (method === "GET" && path.startsWith("/export/")) {
     const em = path.match(/^\/export\/([A-Za-z0-9_-]+)\.html$/);
     if (!em) {
       sendJson(res, 400, { ok: false, reason: "expected /export/<key>.html" });
       return;
     }
-    const html = renderSessionHtml(em[1]!, url.searchParams.get("kind") === "data" ? "data" : "summary");
+    const html = renderSessionHtml(
+      em[1]!,
+      url.searchParams.get("kind") === "data" ? "data" : "summary",
+      { redact: url.searchParams.get("redact") !== "0" }
+    );
     if (html === null) {
       sendJson(res, 404, { ok: false, reason: "no state for that session" });
       return;

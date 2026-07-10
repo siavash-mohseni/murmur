@@ -314,6 +314,7 @@ async function route(
   // key renders from the live snapshot (includes un-persisted mutations);
   // any other key renders from its persisted state file, so past sessions
   // export too. ?kind=data selects the dense dump over the narrative summary.
+  // PII redaction is on by default, ?redact=0 opts out.
   if (method === "GET" && url.pathname.startsWith("/export/")) {
     const m = url.pathname.match(/^\/export\/([A-Za-z0-9_-]+)\.html$/);
     if (!m) {
@@ -321,10 +322,11 @@ async function route(
       return;
     }
     const kind = url.searchParams.get("kind") === "data" ? "data" : "summary";
+    const opts = { redact: url.searchParams.get("redact") !== "0" };
     const html =
       m[1] === SESSION_KEY
-        ? renderStateHtml(store.snapshot(), SESSION_KEY, kind)
-        : renderSessionHtml(m[1]!, kind);
+        ? renderStateHtml(store.snapshot(), SESSION_KEY, kind, opts)
+        : renderSessionHtml(m[1]!, kind, opts);
     if (html === null) {
       sendJson(res, 404, { ok: false, reason: "no state for that session" });
       return;

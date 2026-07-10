@@ -12,8 +12,14 @@ import type { ActivityImage, DashboardState, SessionSummary } from "../shared-ty
 import type { ShareContext } from "./context.js";
 import { buildSummaryHtml } from "./summary-html.js";
 import { buildExportHtml } from "./export-html.js";
+import { redactShareContext } from "./redact.js";
 
 export type ExportKind = "summary" | "data";
+
+export interface RenderOptions {
+  /** PII redaction is on unless explicitly disabled (?redact=0, --no-redact). */
+  redact?: boolean;
+}
 
 const KEY_RE = /^[A-Za-z0-9_-]+$/;
 // Image files are content-addressed hashes written by image-store.ts. The
@@ -60,7 +66,8 @@ export function diskImageResolver(): (img: ActivityImage) => string | null {
 export function renderStateHtml(
   state: DashboardState,
   key: string,
-  kind: ExportKind
+  kind: ExportKind,
+  opts: RenderOptions = {}
 ): string {
   const summary: SessionSummary = {
     key,
@@ -78,18 +85,23 @@ export function renderStateHtml(
       cwd: state.sessionInfo?.cwd,
     }),
   };
-  const ctx: ShareContext = {
+  let ctx: ShareContext = {
     state,
     sessions: [summary],
     resolveImage: diskImageResolver(),
   };
+  if (opts.redact !== false) ctx = redactShareContext(ctx);
   return kind === "data" ? buildExportHtml(ctx) : buildSummaryHtml(ctx);
 }
 
 /** Render a session by key from its persisted state file. Null when the key
  * is invalid or no state exists on disk. */
-export function renderSessionHtml(key: string, kind: ExportKind): string | null {
+export function renderSessionHtml(
+  key: string,
+  kind: ExportKind,
+  opts: RenderOptions = {}
+): string | null {
   const state = loadPersistedState(key);
   if (!state) return null;
-  return renderStateHtml(state, key, kind);
+  return renderStateHtml(state, key, kind, opts);
 }
