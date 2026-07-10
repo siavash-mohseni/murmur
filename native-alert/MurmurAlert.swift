@@ -405,7 +405,11 @@ struct OptionButton: View {
 struct QuestionCard: View {
     let spec: QuestionSpec
     @ObservedObject var focus: QuestionFocus
-    @Binding var customText: String
+    // Must be the ObservableObject itself, not a hand-rolled Binding over it:
+    // a manual Binding carries no SwiftUI dependency, so typing would update
+    // the text without re-rendering this card and the Send button's
+    // .disabled state would never re-evaluate.
+    @ObservedObject var textHolder: CustomTextHolder
     let onSubmit: (String) -> Void
     let onCancel: () -> Void
 
@@ -468,7 +472,7 @@ struct QuestionCard: View {
             // Custom input row.
             if showInput {
                 HStack(spacing: 8) {
-                    TextField(spec.customInputPlaceholder ?? "Or type a custom answer", text: $customText)
+                    TextField(spec.customInputPlaceholder ?? "Or type a custom answer", text: $textHolder.text)
                         .textFieldStyle(.plain)
                         .font(.system(size: 15))
                         .foregroundColor(Color.white.opacity(0.95))
@@ -488,17 +492,16 @@ struct QuestionCard: View {
                                 )
                         )
                         .onSubmit {
-                            if !customText.trimmingCharacters(in: .whitespaces).isEmpty {
-                                onSubmit(customText.trimmingCharacters(in: .whitespaces))
-                            }
+                            let trimmed = textHolder.text.trimmingCharacters(in: .whitespaces)
+                            if !trimmed.isEmpty { onSubmit(trimmed) }
                         }
 
                     Button("Send") {
-                        let trimmed = customText.trimmingCharacters(in: .whitespaces)
+                        let trimmed = textHolder.text.trimmingCharacters(in: .whitespaces)
                         if !trimmed.isEmpty { onSubmit(trimmed) }
                     }
                     .controlSize(.large)
-                    .disabled(customText.trimmingCharacters(in: .whitespaces).isEmpty)
+                    .disabled(textHolder.text.trimmingCharacters(in: .whitespaces).isEmpty)
 
                     Button("Cancel") { onCancel() }
                         .controlSize(.large)
@@ -591,8 +594,9 @@ func cancel() {
     NSApp.stopModal()
 }
 
-// A holder for the @State customText binding so the NSEvent monitor can read
-// it when submitting via Enter.
+// Observable store for the question card's custom-answer text. Declared at
+// the top level (not @State inside the card) because it is created alongside
+// the NSHostingView before the view exists.
 final class CustomTextHolder: ObservableObject {
     @Published var text: String = ""
 }
@@ -636,15 +640,11 @@ case .permission(let p):
 case .question(let q):
     let focus = QuestionFocus()
     let holder = CustomTextHolder()
-    let textBinding = Binding<String>(
-        get: { holder.text },
-        set: { holder.text = $0 }
-    )
     hosting = NSHostingView(rootView: AnyView(
         QuestionCard(
             spec: q,
             focus: focus,
-            customText: textBinding,
+            textHolder: holder,
             onSubmit: { choose($0) },
             onCancel: { cancel() }
         )
