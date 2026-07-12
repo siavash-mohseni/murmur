@@ -9,7 +9,7 @@ import { readTranscriptStats } from "./transcript.js";
 import { readNewTranscriptMessages, type ScannedImage } from "./assistant-text.js";
 import { saveImage, resolveImageFile } from "./image-store.js";
 import type { ActivityImage } from "./shared-types.js";
-import { openInBrowser } from "./browser-open.js";
+import { isDesktopApp, openInBrowser } from "./browser-open.js";
 import { requestOwnerSummary } from "./owner-summary.js";
 import { memoryDirFor, scanMemoryDir } from "./memory.js";
 import { listSessions, listAllSessions } from "./discovery.js";
@@ -510,10 +510,19 @@ async function handleAutoOpen(store: Store, _req: IncomingMessage, res: ServerRe
     sendJson(res, 200, { ok: false, opened: false, reason: "no port bound yet" });
     return;
   }
-  autoOpenedOnce = true;
   // Same preference as murmur_open: the hub's drill-down route when a hub is
   // alive, so AUTO mode and manual activation land on the same origin.
-  openInBrowser(await preferredDashboardUrl(SESSION_KEY, port));
+  const url = await preferredDashboardUrl(SESSION_KEY, port);
+  // Desktop app: the in-app Browser pane is the target and only the model can
+  // drive it, so return the URL for the hook to inject as an open instruction.
+  // autoOpenedOnce stays false so the instruction repeats until a pane
+  // actually connects (clientCount takes over the dedupe from then on).
+  if (isDesktopApp()) {
+    sendJson(res, 200, { ok: true, opened: false, desktop: true, url });
+    return;
+  }
+  autoOpenedOnce = true;
+  openInBrowser(url);
   sendJson(res, 200, { ok: true, opened: true });
 }
 

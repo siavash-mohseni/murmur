@@ -480,10 +480,22 @@ async function runUserPrompt(input) {
 
   // MURMUR_AUTO=1: ask the server to open the dashboard (server-side dedupe:
   // at most one launch per server lifetime, never when a tab is connected).
+  // Under the desktop app the server launches nothing and returns the URL,
+  // and the open instruction is injected below for the model to execute in
+  // the in-app Browser pane instead.
   const auto = process.env.MURMUR_AUTO === "1";
+  let openInstruction = "";
   if (auto) {
     try {
-      await fetch(`http://127.0.0.1:${port}/api/autoopen`, { method: "POST", signal: AbortSignal.timeout(600) });
+      const res = await fetch(`http://127.0.0.1:${port}/api/autoopen`, { method: "POST", signal: AbortSignal.timeout(600) });
+      const body = await res.json().catch(() => null);
+      if (body && body.desktop && body.url && !body.opened) {
+        openInstruction =
+          `Murmur's dashboard pane is not open yet. Open it in the in-app browser now, before anything else: ` +
+          `call mcp__Claude_Browser__preview_start({ url: ${JSON.stringify(body.url)} }) once, then ` +
+          `mcp__Claude_Browser__read_page to confirm the dashboard rendered (task rows and pending questions visible). ` +
+          `If those tools are unavailable, run \`open ${JSON.stringify(body.url)}\` via Bash instead.`;
+      }
     } catch {
       // fire-and-forget
     }
@@ -496,8 +508,9 @@ async function runUserPrompt(input) {
   if (auto && watching !== "") watching = "1";
   if (watching === "" || watching === "0") return;
 
+  const context = openInstruction ? `${openInstruction}\n\n${PROMPT_REMINDER}` : PROMPT_REMINDER;
   process.stdout.write(
-    JSON.stringify({ hookSpecificOutput: { hookEventName: "UserPromptSubmit", additionalContext: PROMPT_REMINDER } })
+    JSON.stringify({ hookSpecificOutput: { hookEventName: "UserPromptSubmit", additionalContext: context } })
   );
 }
 

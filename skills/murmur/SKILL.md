@@ -21,7 +21,8 @@ A user prompt contains `--murmur` or the phrase "murmur mode", or a hook-injecte
 ## On activation (before responding)
 
 1. Call the MCP tool `mcp__murmur__murmur_open` once. Surface the returned URL to the user in chat exactly once. In `MURMUR_AUTO` mode the pane may already be open (the hook auto-opens it), in which case `murmur_open` is still safe: it never spawns a second tab for a connected session.
-2. If the task has discrete phases or steps (orchestrator, multi-step task), call `mcp__murmur__murmur_init` with the row list and use `TaskCreate` for each row. The PostToolUse mirror hook keeps Murmur in sync automatically.
+2. **Desktop app**: when the session runs in the Claude Code desktop app, the server launches no system browser and the `murmur_open` result tells you to open the pane yourself. Follow it: call `mcp__Claude_Browser__preview_start({ url })` with the returned URL, then `mcp__Claude_Browser__read_page` to confirm the dashboard rendered (task rows and pending questions visible). If the render looks stalled or empty, check `mcp__Claude_Browser__read_console_messages({ onlyErrors: true })` and report what you find. If the Browser tools are unavailable, run `open "<url>"` via Bash.
+3. If the task has discrete phases or steps (orchestrator, multi-step task), call `mcp__murmur__murmur_init` with the row list and use `TaskCreate` for each row. The PostToolUse mirror hook keeps Murmur in sync automatically.
 
 ## While active
 
