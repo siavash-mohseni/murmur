@@ -37,18 +37,47 @@ const srv = spawn("node", [DIST, "--port", PORT], {
   stdio: "ignore",
 });
 
-const cleanup = () => {
+const stateUrl = `http://127.0.0.1:${PORT}/state`;
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+const srvExited = new Promise((resolve) => srv.on("exit", resolve));
+
+// Await the server's exit before removing its HOME: rmSync while the child is
+// still flushing state throws ENOTEMPTY.
+const shutdown = async (code) => {
   try {
     srv.kill();
   } catch {
     // already gone
   }
-  rmSync(TMP, { recursive: true, force: true });
+  await Promise.race([srvExited, sleep(3000)]);
+  try {
+    srv.kill("SIGKILL");
+  } catch {
+    // already gone
+  }
+  try {
+    rmSync(TMP, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+  } catch (err) {
+    console.log(`(cleanup: could not remove ${TMP}: ${err.code || err})`);
+  }
+  process.exit(code);
 };
-process.on("exit", cleanup);
 
-const stateUrl = `http://127.0.0.1:${PORT}/state`;
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+// Backstop for exits that bypass shutdown (thrown errors). It must stay
+// tolerant because an exit handler cannot await the child.
+process.on("exit", () => {
+  try {
+    srv.kill("SIGKILL");
+  } catch {
+    // already gone
+  }
+  try {
+    rmSync(TMP, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 });
+  } catch {
+    // best effort
+  }
+});
 
 // Wait for the server to answer /state.
 let up = false;
@@ -62,7 +91,7 @@ for (let i = 0; i < 40 && !up; i++) {
 }
 if (!up) {
   console.log(`!!  server did not come up on :${PORT}`);
-  process.exit(1);
+  await shutdown(1);
 }
 
 // Feed one PostToolUse event through the real hook, exactly as the harness
@@ -111,8 +140,8 @@ check("run2 titled by skill", "pr-reviewer", titled.length ? titled[titled.lengt
 console.log("");
 if (fail === 0) {
   console.log(`mirror-hook smoke: all ${pass} checks pass.`);
-  process.exit(0);
+  await shutdown(0);
 } else {
   console.log(`mirror-hook smoke: ${fail} check(s) failed.`);
-  process.exit(1);
+  await shutdown(1);
 }
