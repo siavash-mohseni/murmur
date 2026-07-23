@@ -13,6 +13,22 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="Murmur" />
     <title>Murmur</title>
+    <script>
+      // The Claude desktop app renders its in-app browser pane at a fixed ~0.6
+      // zoom-out, so the dense dashboard typography lands at ~10px and reads far
+      // smaller than an Artifact in the same pane. No in-page API exposes that
+      // zoom factor (innerWidth/visualViewport/dpr all report the pre-shrink
+      // viewport), so key off the surface instead: only that pane carries both
+      // "Electron" and "Claude" in the user-agent. A real browser or phone has
+      // neither and keeps native sizing. Cancel the shrink with a matching CSS
+      // zoom so the dashboard renders at a comfortable 1:1.
+      (function () {
+        var ua = navigator.userAgent || "";
+        if (/Electron/.test(ua) && /Claude/.test(ua)) {
+          document.documentElement.style.zoom = "1.6";
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>
