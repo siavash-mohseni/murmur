@@ -31,6 +31,7 @@ if (!process.env["MURMUR_SMOKE_CHILD"]) {
 
 const { startHttpServer } = await import("../src/http.js");
 const { store } = await import("../src/state.js");
+const { dashboardAskTool } = await import("../src/tools/ask.js");
 
 const PORT = 5179;
 
@@ -165,6 +166,46 @@ async function main(): Promise<void> {
   assert("ok" in timeoutResult && timeoutResult.ok === false, "timeout result ok=false");
   assert("reason" in timeoutResult && timeoutResult.reason === "timeout", "timeout reason");
   console.log("ok: timeout");
+
+  // 8. one-shot AskUserQuestion fallback: only a failed murmur_ask (via the
+  // tool, not bare setPendingQuestion) arms it, and consuming clears it.
+  const consumeFallback = async (): Promise<boolean> => {
+    const r = await postJson("/question/fallback", {});
+    assert(r.status === 200, "/question/fallback status 200");
+    return (r.json as { fallback: boolean }).fallback;
+  };
+  assert((await consumeFallback()) === false, "fallback unarmed before any murmur_ask");
+  const noWatchers = await dashboardAskTool.handler({ question: "Q", options: [{ label: "a" }] });
+  assert(noWatchers.isError === true, "no-watchers murmur_ask isError");
+  assert((await consumeFallback()) === true, "failed murmur_ask arms the fallback");
+  assert((await consumeFallback()) === false, "fallback is one-shot");
+  console.log("ok: fallback armed by failed murmur_ask, one-shot consume");
+
+  // 9. an answered murmur_ask leaves the fallback unarmed, and a mirrored
+  // AskUserQuestion (/sync source "ask") clears a stale armed flag.
+  const sseCtrl = new AbortController();
+  const sse = await fetch(`http://127.0.0.1:${PORT}/events`, { signal: sseCtrl.signal });
+  sse.body!.getReader().read().catch(() => {});
+  const answeredPromise = dashboardAskTool.handler({
+    question: "Q",
+    options: [{ label: "yes" }],
+    timeoutMs: 5_000,
+  });
+  assert(store.state.pendingQuestion !== null, "murmur_ask registered a pending question");
+  await postJson("/api/answer", { questionId: store.state.pendingQuestion!.questionId, answer: "yes" });
+  const answered = await answeredPromise;
+  assert(answered.isError === false, "answered murmur_ask not an error");
+  assert((await consumeFallback()) === false, "answered murmur_ask leaves fallback unarmed");
+  const timedOutAsk = await dashboardAskTool.handler({
+    question: "Q",
+    options: [{ label: "a" }],
+    timeoutMs: 100,
+  });
+  assert(timedOutAsk.isError === true, "timed-out murmur_ask isError");
+  await postJson("/sync", { type: "prompt", source: "ask", question: "Q", ok: true });
+  assert((await consumeFallback()) === false, "mirrored AskUserQuestion clears a stale armed flag");
+  sseCtrl.abort();
+  console.log("ok: answered ask disarms, mirrored AskUserQuestion clears stale flag");
 
   await handle.close();
   console.log("\nsmoke: all checks passed");

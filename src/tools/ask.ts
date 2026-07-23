@@ -39,6 +39,7 @@ export const dashboardAskTool = {
     // falls back to AskUserQuestion, and the question hook's watcher gate lets
     // that CLI prompt through.
     if (!store.hasWatchers()) {
+      store.recordAskOutcome(false);
       return {
         content: [
           {
@@ -63,6 +64,7 @@ export const dashboardAskTool = {
       expiresAt,
     };
     const result = await store.setPendingQuestion(question, timeoutMs);
+    store.recordAskOutcome(result.ok);
     return {
       content: [
         {

@@ -11,6 +11,7 @@
 //   mirror       PostToolUse   mirrors tool calls into Activity/Progress
 //   permission   PermissionRequest   routes Bash permission prompts (blocks)
 //   question     PreToolUse(AskUserQuestion)   redirects to murmur_ask (exit 2)
+//                unless the last murmur_ask failed (one-shot fallback allow)
 //   user-prompt  UserPromptSubmit   records the prompt, injects the reminder
 //   precompact   PreCompact    re-primes the transcript scanner
 //   stop         Stop          turn-end transcript pings (5x, cursor dedupes)
@@ -97,6 +98,24 @@ function resolveMurmurPort(sid) {
   if (!port) port = readPort("default.port");
   if (!port && process.env.CLAUDE_MURMUR_PORT) port = process.env.CLAUDE_MURMUR_PORT;
   return port;
+}
+
+// Consumes the one-shot AskUserQuestion fallback: true exactly once after a
+// failed murmur_ask (the server arms it on every ok:false outcome). Older
+// servers without the endpoint, timeouts, and non-200s all read as false, so
+// the question block stays intact there.
+async function consumeAskFallback(port) {
+  try {
+    const res = await fetch(`http://127.0.0.1:${port}/question/fallback`, {
+      method: "POST",
+      signal: AbortSignal.timeout(600),
+    });
+    if (res.status !== 200) return false;
+    const body = await res.json();
+    return body?.fallback === true;
+  } catch {
+    return false;
+  }
 }
 
 // Probes GET /watchers. Returns "1" (someone is watching), "0" (alive but
@@ -437,7 +456,10 @@ const QUESTION_REDIRECT = `Murmur is active for this session, so questions must 
 
 // PreToolUse on AskUserQuestion: when Murmur is live and watched, block the
 // CLI-only question and redirect the model to murmur_ask. Fail-open in every
-// uncertain case. Returns the process exit code.
+// uncertain case. When the last murmur_ask failed (e.g. timed out with the
+// user away from the pane), let this one call through: it is the fallback
+// QUESTION_REDIRECT and the skill promise, and blocking it leaves no working
+// question path at all. Returns the process exit code.
 async function runQuestion(input) {
   if (str(input.tool_name) !== "AskUserQuestion") return 0;
   if (isMurmurRepo(input)) return 0;
@@ -447,6 +469,8 @@ async function runQuestion(input) {
 
   const watching = await murmurWatching(port);
   if (watching === "" || watching === "0") return 0;
+
+  if (await consumeAskFallback(port)) return 0;
 
   process.stderr.write(`${QUESTION_REDIRECT}\n`);
   return 2;

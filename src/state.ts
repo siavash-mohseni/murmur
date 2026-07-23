@@ -407,6 +407,11 @@ export class Store {
   // Most recent orchestrator Skill target, used to name a new dashboard run by
   // its goal instead of "Run N" (see currentRunTitle / addRow).
   private lastSkillTarget: string | null = null;
+  // Armed when the last murmur_ask failed (timeout, busy, no watchers). The
+  // question hook consumes it via POST /question/fallback to let exactly one
+  // AskUserQuestion through, the fallback the skill and the hook's redirect
+  // text promise. Live-only: the flag has no meaning past this process.
+  private askFallbackArmed = false;
   private pendingResolvers = new Map<
     string,
     {
@@ -620,6 +625,24 @@ export class Store {
    */
   hasWatchers(): boolean {
     return this.listeners.size > 0 || this.nativeAlertsEnabled() || this.remoteWatcherCount() > 0;
+  }
+
+  /** Called by the murmur_ask tool with every outcome. A failure arms the
+   * one-shot AskUserQuestion fallback, a success disarms it. */
+  recordAskOutcome(ok: boolean): void {
+    this.askFallbackArmed = !ok;
+  }
+
+  /**
+   * True once per failed murmur_ask, then false until the next failure.
+   * Consumed by the question hook (POST /question/fallback) before it decides
+   * to block AskUserQuestion, and cleared when a completed AskUserQuestion is
+   * mirrored via /sync so a stale failure never leaks a later CLI prompt.
+   */
+  consumeAskFallback(): boolean {
+    const armed = this.askFallbackArmed;
+    this.askFallbackArmed = false;
+    return armed;
   }
 
   // Routine notifications. These persist to the shared notifications.json (not

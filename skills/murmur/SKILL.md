@@ -27,7 +27,7 @@ A user prompt contains `--murmur` or the phrase "murmur mode", or a hook-injecte
 ## While active
 
 - Replace every `AskUserQuestion` call with `mcp__murmur__murmur_ask`. Same input shape (question, header, options, multiSelect). The card renders in the browser as a modal and the answer flows back to the tool call.
-- On `murmur_ask` returning `{ ok: false, reason: ... }`: fall back to `AskUserQuestion` for that single question. Do not retry `murmur_ask` for the same question.
+- On `murmur_ask` returning `{ ok: false, reason: ... }`: fall back to `AskUserQuestion` for that single question. Do not retry `murmur_ask` for the same question. The question hook honors this: the server records each `murmur_ask` outcome and the hook lets exactly one `AskUserQuestion` through after a failure, then resumes blocking.
 - Use `mcp__murmur__murmur_log({ message })` for narrative status updates that would otherwise be silent prose ("running tests", "spec gathering complete").
 - The mirror hook runs automatically. Do not also call `murmur_update` from a tool unless you are intentionally updating a row that was not created via `TaskCreate`.
 

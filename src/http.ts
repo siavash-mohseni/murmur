@@ -261,6 +261,13 @@ const ROUTES: Record<string, RouteEntry> = {
   "POST /api/answer": { handler: handleAnswer, loopback: true },
   "POST /api/cancel": { handler: handleCancel, loopback: true },
   "POST /permission/ask": { handler: handlePermissionAsk, loopback: true },
+  // One-shot probe for the question hook: `fallback: true` exactly once after
+  // a failed murmur_ask, so the hook lets that single AskUserQuestion through
+  // instead of blocking the documented fallback (no request body).
+  "POST /question/fallback": {
+    handler: (store, _req, res) => sendJson(res, 200, { ok: true, fallback: store.consumeAskFallback() }),
+    loopback: true,
+  },
   "POST /api/alerts/native": { handler: handleNativeAlerts, loopback: true },
   "POST /api/permission/answer": { handler: handlePermissionAnswer, loopback: true },
   "POST /api/owner/summary": { handler: handleOwnerSummary, loopback: true },
@@ -764,6 +771,10 @@ function handleSync(store: Store, payload: SyncPayload): void {
     return;
   }
   if (payload.type === "prompt") {
+    // A mirrored AskUserQuestion means the fallback was used (or the CLI
+    // prompt was reachable anyway), so a still-armed failure flag is stale:
+    // without this clear it would leak one CLI prompt much later.
+    if (payload.source === "ask") store.consumeAskFallback();
     store.addActivity({
       kind: "prompt",
       id: crypto.randomUUID(),

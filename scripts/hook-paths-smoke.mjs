@@ -25,8 +25,10 @@ const check = (label, want, got) => {
 };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+// stdin/stdout piped (not ignored): the fallback section below drives the
+// server's MCP stdio transport directly to run a real murmur_ask.
 const srv = spawn("node", [join(ROOT, "dist", "index.js"), "--port", PORT], {
-  env: { ...process.env, HOME: TMP, MURMUR_HUB: "0" }, stdio: "ignore",
+  env: { ...process.env, HOME: TMP, MURMUR_HUB: "0" }, stdio: ["pipe", "pipe", "ignore"],
 });
 process.on("exit", () => { try { srv.kill(); } catch {} rmSync(TMP, { recursive: true, force: true }); });
 
@@ -142,6 +144,49 @@ check("permission deny -> exit 2", 2, r.code);
 // --- permission: bypass mode never routes ---
 r = await runHook("permission", '{"tool_name":"Bash","permission_mode":"bypassPermissions","tool_input":{"command":"ls"}}');
 check("bypassPermissions -> exit 0", 0, r.code);
+
+// --- question hook: one-shot fallback after a failed murmur_ask ---
+// The 2026-07-22 incident: murmur_ask timed out while the pane was watched,
+// then the question hook blocked the documented AskUserQuestion fallback,
+// leaving no working question path. A failed murmur_ask must unblock exactly
+// one AskUserQuestion. Drives the real MCP stdio transport so the whole
+// chain (tool outcome -> server flag -> hook consume) is exercised.
+const rpcPending = new Map();
+let rpcBuf = "";
+srv.stdout.on("data", (chunk) => {
+  rpcBuf += chunk;
+  let nl;
+  while ((nl = rpcBuf.indexOf("\n")) >= 0) {
+    const line = rpcBuf.slice(0, nl);
+    rpcBuf = rpcBuf.slice(nl + 1);
+    try {
+      const msg = JSON.parse(line);
+      const resolve = rpcPending.get(msg.id);
+      if (resolve) { rpcPending.delete(msg.id); resolve(msg); }
+    } catch {}
+  }
+});
+let rpcId = 0;
+const rpc = (method, params) => new Promise((resolve) => {
+  const id = ++rpcId;
+  rpcPending.set(id, resolve);
+  srv.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", id, method, params })}\n`);
+});
+await rpc("initialize", {
+  protocolVersion: "2024-11-05", capabilities: {}, clientInfo: { name: "smoke", version: "0" },
+});
+srv.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized" })}\n`);
+const askRes = await rpc("tools/call", {
+  name: "murmur_ask",
+  arguments: { question: "fallback smoke?", options: [{ label: "a" }], timeoutMs: 300 },
+});
+let askBody = {};
+try { askBody = JSON.parse(askRes.result.content[0].text); } catch {}
+check("murmur_ask timed out (ok=false)", false, askBody.ok);
+r = await runHook("question", '{"tool_name":"AskUserQuestion","cwd":"/x"}');
+check("question after failed murmur_ask -> exit 0 (fallback)", 0, r.code);
+r = await runHook("question", '{"tool_name":"AskUserQuestion","cwd":"/x"}');
+check("question again -> exit 2 (fallback consumed)", 2, r.code);
 
 // --- stop / precompact: fail-open without transcript ---
 r = await runHook("stop", '{"session_id":"s1"}');
