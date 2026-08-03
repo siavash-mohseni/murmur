@@ -8,8 +8,7 @@
     "murmur-mcp": "dist/index.js",
     "murmur-mcp-install": "dist/setup.js",
     "murmur-mcp-uninstall": "dist/uninstall.js",
-    "murmur-export": "dist/export-cli.js",
-    "murmur-relay": "dist/relay.js"
+    "murmur-export": "dist/export-cli.js"
   },
   "files": [
     "dist",

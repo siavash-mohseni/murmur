@@ -37,11 +37,19 @@ When in Murmur mode and dispatching a sub-agent, prepend this reminder to the su
 
 ## Deactivation
 
-Murmur stays on for the rest of the session unless the user says "murmur off" or starts a new session. There is no cleanup on deactivation, the next prompt without the flag is simply business-as-usual.
+Murmur stays on for the rest of the session unless the user says "murmur off" or starts a new session. There is no cleanup on deactivation, the next prompt without the flag is business-as-usual.
 
 ## Multi-session
 
 Each Claude Code session owns its own Murmur instance on its own port (5173, 5174, ...). The session switcher in the header lets one browser tab hop between them.
+
+## Artifact design
+
+Default every HTML artifact you publish to the Murmur design language in ~/.claude/skills/murmur/references/ARTIFACT_DESIGN.md. It is the recorded design system for this environment, so it is what the artifact-design skill's precedence order means by an existing project system. Precedence above that default: the user's own words first, then a design system the current project records. This governs HTML artifacts only, not the Murmur app or any product UI you build.
+
+## Progress dashboard
+
+Any run with 3 or more named phases or gates surfaces its progress live rather than as prose. Follow the progress-dashboard skill, which owns the choice between a dynamic Workflow and the TaskCreate dashboard. Model routing for either route is MANIFESTO.md section 2. Single-step tasks, ad-hoc edits, and simple questions are exempt.
 
 ## Surface boundary
 

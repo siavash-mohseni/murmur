@@ -11,8 +11,6 @@
 //   murmur-export <key> --receipt          secret gist + receipt link on the
 //                                          current branch's PR (gh required)
 //   murmur-export <key> --receipt --pr <n> target a specific PR number
-//   murmur-export <key> --share [--ttl d]  hosted replay: upload to the relay
-//                                          (MURMUR_RELAY), get an expiring link
 //   murmur-export <key> --no-redact        keep emails, keys, usernames, and
 //                                          other PII the export scrubs by default
 //
@@ -27,7 +25,7 @@ import { listAllSessions, type PastSessionSummary } from "./discovery.js";
 import { renderSessionHtml, type ExportKind } from "./export/render.js";
 
 const args = process.argv.slice(2);
-const VALUE_FLAGS = new Set(["--pr", "--out", "--ttl"]);
+const VALUE_FLAGS = new Set(["--pr", "--out"]);
 const flags = new Set<string>();
 const flagValues = new Map<string, string>();
 const positional: string[] = [];
@@ -167,43 +165,6 @@ async function receipt(prefix: string): Promise<void> {
   console.log(`receipt appended to ${pr.url}`);
 }
 
-// Hosted replay: POST the summary to the relay's /replays and print the
-// expiring share link. The relay origin derives from MURMUR_RELAY (the same
-// variable the hub tunnels through), ws(s) mapped to http(s).
-async function share(prefix: string): Promise<void> {
-  const raw = (process.env["MURMUR_RELAY"] ?? "").trim();
-  if (!raw) fail("--share needs MURMUR_RELAY pointing at a relay");
-  let origin: URL;
-  try {
-    origin = new URL(raw);
-  } catch {
-    fail(`unparseable MURMUR_RELAY: ${raw}`);
-  }
-  if (origin.protocol === "ws:") origin.protocol = "http:";
-  if (origin.protocol === "wss:") origin.protocol = "https:";
-  origin.pathname = "";
-  origin.search = "";
-
-  const session = await resolveKey(prefix);
-  const html = renderOrDie(session.key);
-  const ttl = flagValues.get("--ttl");
-  const key = process.env["MURMUR_RELAY_KEY"];
-  const res = await fetch(new URL(`/replays${ttl ? `?ttl=${encodeURIComponent(ttl)}` : ""}`, origin), {
-    method: "POST",
-    headers: {
-      "content-type": "text/html; charset=utf-8",
-      ...(key ? { authorization: `Bearer ${key}` } : {}),
-    },
-    body: html,
-  }).catch((err) => fail(`relay unreachable: ${err instanceof Error ? err.message : String(err)}`));
-  const out = (await res.json().catch(() => ({}))) as { ok?: boolean; url?: string; expiresAt?: string; reason?: string };
-  if (!res.ok || !out.ok || !out.url) {
-    fail(`relay refused the replay: ${out.reason ?? `status ${res.status}`}`);
-  }
-  console.log(`replay:  ${out.url}`);
-  console.log(`expires: ${out.expiresAt}`);
-}
-
 async function main(): Promise<void> {
   const target = positional[0];
   if (!target || flags.has("--list")) {
@@ -212,10 +173,6 @@ async function main(): Promise<void> {
   }
   if (flags.has("--receipt")) {
     await receipt(target);
-    return;
-  }
-  if (flags.has("--share")) {
-    await share(target);
     return;
   }
   await exportToFile(target);

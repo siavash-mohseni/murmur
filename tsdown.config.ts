@@ -10,7 +10,7 @@ import { defineConfig } from "tsdown";
 // machine. They bundle scripts/install-shared.ts into each output.
 export default defineConfig([
   {
-    entry: ["./src/index.ts", "./src/hub.ts", "./src/relay.ts"],
+    entry: ["./src/index.ts", "./src/hub.ts"],
     dts: true,
     clean: false,
     format: "esm",

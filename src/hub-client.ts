@@ -6,20 +6,11 @@
 import { spawn } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { request as httpRequest } from "node:http";
-import { request as httpsRequest } from "node:https";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { HUB_PORT_FILE, DEFAULT_HUB_PORT } from "./paths.js";
 
 const HERE = fileURLToPath(new URL(".", import.meta.url));
-
-// When the hub is configured for TLS (see hub.ts), its surface answers https
-// even on loopback, and its cert names a tailnet host rather than 127.0.0.1,
-// so local probes skip verification.
-const TLS_ON =
-  (process.env["MURMUR_TLS_CERT"] ?? "").length > 0 &&
-  (process.env["MURMUR_TLS_KEY"] ?? "").length > 0;
-const HUB_SCHEME = TLS_ON ? "https" : "http";
 
 function readHubPort(): number | null {
   try {
@@ -30,16 +21,14 @@ function readHubPort(): number | null {
   }
 }
 
-function probeFleetOnce(scheme: "http" | "https", port: number): Promise<boolean> {
+function probeIsHub(port: number): Promise<boolean> {
   return new Promise((resolve) => {
-    const reqFn = scheme === "https" ? httpsRequest : httpRequest;
-    const probe = reqFn(
+    const probe = httpRequest(
       {
         host: "127.0.0.1",
         port,
         path: "/fleet",
         timeout: 400,
-        ...(scheme === "https" ? { rejectUnauthorized: false } : {}),
       },
       (res) => {
         let body = "";
@@ -57,11 +46,6 @@ function probeFleetOnce(scheme: "http" | "https", port: number): Promise<boolean
     probe.on("error", () => resolve(false));
     probe.end();
   });
-}
-
-async function probeIsHub(port: number): Promise<boolean> {
-  if (await probeFleetOnce("http", port)) return true;
-  return TLS_ON ? probeFleetOnce("https", port) : false;
 }
 
 /** The live hub's port, or null when no hub answers. */
@@ -124,10 +108,7 @@ export async function ensureHub(): Promise<number | null> {
 export async function preferredDashboardUrl(sessionKey: string, sessionPort: number): Promise<string> {
   const hubPort = await liveHubPort();
   if (hubPort) {
-    // A TLS hub carries a cert for a real hostname (e.g. a tailnet name), so
-    // prefer that name when configured: it is the URL the cert validates for.
-    const host = TLS_ON ? (process.env["MURMUR_HUB_HOSTNAME"] ?? "").trim() || "127.0.0.1" : "127.0.0.1";
-    return `${HUB_SCHEME}://${host}:${hubPort}/s/${sessionKey}`;
+    return `http://127.0.0.1:${hubPort}/s/${sessionKey}`;
   }
   return `http://127.0.0.1:${sessionPort}/`;
 }

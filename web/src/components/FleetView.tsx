@@ -1,7 +1,7 @@
 import { useCallback, useState } from "react";
 import { Archive, CheckCircle2, GitBranch, Monitor } from "lucide-react";
 import { Panel } from "@/components/Panel";
-import { PairPhoneButton, FleetAlerts } from "@/components/PairPhone";
+import { FleetAlerts } from "@/components/FleetAlerts";
 import { PastSessionsModal } from "@/components/PastSessions";
 import { QuestionCard, PermissionCard } from "@/components/owner/OwnerInbox";
 import { useFleet, type FleetSessionSummary } from "@/hooks/useFleet";
@@ -179,7 +179,6 @@ export function FleetView({ onOpenSession }: { onOpenSession: (key: string) => v
         </div>
         <div className="flex items-center gap-1.5">
           <FleetAlerts />
-          <PairPhoneButton />
           <button
             type="button"
             onClick={() => setPastOpen(true)}

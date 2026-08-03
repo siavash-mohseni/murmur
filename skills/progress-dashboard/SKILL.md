@@ -31,7 +31,7 @@ Either way the user sees the run in Murmur. Try the workflow route first, fall b
 
 ### Exclude
 - Per-step debug output, tool results, or sub-agent transcripts (the dashboard is a high-signal summary, not a log)
-- Project source files (the orchestrator handles those; this skill is just about visibility)
+- Project source files (the orchestrator handles those, this skill is only about visibility)
 
 ### Why This Matters
 A multi-phase orchestrator that posts prose updates ("running tests now...", "moving on") leaves the user blind to overall progress and gate state. The user has flagged this regression before. A re-emitted dashboard at every transition is the single load-bearing artifact that keeps the run legible.
@@ -46,7 +46,7 @@ A multi-phase orchestrator that posts prose updates ("running tests now...", "mo
 
 4. **On entering a phase or gate.** Call TaskUpdate on the matching row to `in_progress`, then re-emit the dashboard.
 
-5. **On phase or gate completion.** Call TaskUpdate to `completed`, then re-emit the dashboard. **Marking a row failed:** the harness TaskUpdate status enum is `pending|in_progress|completed|deleted` — it has NO `failed`. To turn a row red, call the `mcp__murmur__murmur_update` tool with `{ row: "<exact subject>", status: "failed", detail: "<reason>" }`. Never use TaskUpdate `deleted` to signal failure — Murmur treats `deleted` as a no-op so a completed prior run is never flipped red. A conditional phase whose condition is not met (for example "if user confirmed" and they did not, or a step gated on external CI you will not wait for) still gets closed now: mark it `completed` with a detail saying why it did not run, such as "Skipped: user did not confirm". Reserve `failed` (via `murmur_update`) for the case where not running it is itself a problem. Never leave a not-taken branch sitting in `in_progress`.
+5. **On phase or gate completion.** Call TaskUpdate to `completed`, then re-emit the dashboard. **Marking a row failed:** the harness TaskUpdate status enum is `pending|in_progress|completed|deleted`: it has NO `failed`. To turn a row red, call the `mcp__murmur__murmur_update` tool with `{ row: "<exact subject>", status: "failed", detail: "<reason>" }`. Never use TaskUpdate `deleted` to signal failure: Murmur treats `deleted` as a no-op so a completed prior run is never flipped red. A conditional phase whose condition is not met (for example "if user confirmed" and they did not, or a step gated on external CI you will not wait for) still gets closed now: mark it `completed` with a detail saying why it did not run, such as "Skipped: user did not confirm". Reserve `failed` (via `murmur_update`) for the case where not running it is itself a problem. Never leave a not-taken branch sitting in `in_progress`.
 
 6. **On gate failure.** Re-emit the dashboard with the gate row marked failed (via `mcp__murmur__murmur_update`, status `failed`), surface the failure detail to the user, stop the orchestration. Do not proceed to the next phase. Closing the run still applies: run the close-out in Step 7 so no earlier row is left open.
 
@@ -72,10 +72,10 @@ A multi-phase orchestrator that posts prose updates ("running tests now...", "mo
 
 - End your turn, hand off, or pivot to unrelated work while any row is still `in_progress` or `pending`. Close every open row to a terminal state and emit the final dashboard first. A stranded `in_progress` row, almost always the last phase, is the dashboard's most visible failure.
 - Leave a conditional phase ("if user confirmed", "if CI passes") open because its branch was not taken. Close it as `completed` with a "Skipped: <reason>" detail. The store never auto-closes a row, so whatever you leave open stays open forever.
-- Skip the initial dashboard emit. The user must see the whole plan before the run begins; otherwise they cannot judge scope or estimate time.
-- Replace a dashboard re-emit with a prose sentence like "moving to Phase 3". The dashboard is the artifact; prose is not a substitute.
-- Batch many transitions into a single re-emit. One transition, one re-emit. Batching hides which step actually advanced.
+- Skip the initial dashboard emit. The user must see the whole plan before the run begins. Otherwise they cannot judge scope or estimate time.
+- Replace a dashboard re-emit with a prose sentence like "moving to Phase 3". The dashboard is the artifact, prose is not a substitute.
+- Batch many transitions into a single re-emit. One transition, one re-emit. Batching hides which step advanced.
 - TaskCreate rows lazily as phases start. The user needs the full list up front so the dashboard length stays stable.
-- Cross a gate marked failed. Stop the run; ask the user how to proceed. Auto-recovery hides regressions.
+- Cross a gate marked failed. Stop the run and ask the user how to proceed. Auto-recovery hides regressions.
 - Use a different format per orchestrator. The same Status / Phase / Detail markdown table everywhere keeps the user's pattern-matching cheap.
 - Hide the dashboard inside a `<details>` block or a tool result the user has to expand. It must be the visible top-level output at every transition.
