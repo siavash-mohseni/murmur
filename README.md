@@ -244,6 +244,12 @@ node scripts/hub-smoke.mjs           # hub, fleet, proxy, watcher relay
 node scripts/export-smoke.mjs        # export CLI, server routes, image inlining
 bun scripts/redact-smoke.ts          # PII redaction rules and share-context walk
 node scripts/make-icons.mjs          # regenerate the PWA icon set
+node scripts/screenshots.mjs         # retake the README screenshots (see its header)
 ```
+
+The screenshot script drives headless Chrome over the DevTools protocol at 2x
+and captures a fictional demo fleet, never your own sessions. Point it at a hub
+whose sessions are all demo data: pass `MURMUR_HUB`, `MURMUR_SHOT_MAIN`,
+`MURMUR_SHOT_A`, and `MURMUR_SHOT_B`.
 
 Type-check with `bunx tsc --noEmit` at the repo root (server) and inside `web/` (dashboard). The macOS alert helper builds separately with `bun run build:native` (needs `swiftc`) and is also built opportunistically by setup.
