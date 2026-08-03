@@ -10,7 +10,7 @@
 // Bump SW_VERSION on any behavioural change so you can confirm in DevTools
 // (Application > Service Workers, or the console log below) that the browser
 // has actually picked up the new worker and isn't still running an old one.
-const SW_VERSION = "2026-07-04-pager";
+const SW_VERSION = "2026-08-03-local-only";
 
 self.addEventListener("install", () => {
   // Activate immediately; we don't need the old SW to drain first.
@@ -358,118 +358,10 @@ function showRoutineNotification(n) {
     .catch((err) => console.error("[Murmur SW] showNotification failed:", err));
 }
 
-// --- Web Push (the pager channel) -------------------------------------------
-//
-// Real push from the hub: arrives through the browser's push service, so it
-// fires with every Murmur tab closed and the browser in the background. This
-// is deliberately NOT gated by the pushEnabled pref or tab visibility: the
-// pref governs the SSE fallback channel above, while a push subscription is
-// its own explicit opt-in (made from the fleet view's alert menu) and exists
-// precisely for the moments no tab can fire. Tags match the SSE channel's
-// (questionId/permissionId), so if both channels race, the OS shows one.
-self.addEventListener("push", (event) => {
-  let data = null;
-  try {
-    data = event.data ? event.data.json() : null;
-  } catch {
-    data = null;
-  }
-  if (!data) return;
-  event.waitUntil(handlePushMessage(data));
-});
-
-async function handlePushMessage(data) {
-  // The prompt was answered somewhere else: clear the lock-screen alert so
-  // its Allow/Deny buttons don't linger pointing at a resolved permission.
-  if (data.kind === "resolve" && data.tag) {
-    const shown = await self.registration.getNotifications({ tag: data.tag });
-    for (const n of shown) n.close();
-    return;
-  }
-  if (data.kind === "permission") {
-    return self.registration.showNotification(data.title || "Permission requested", {
-      body: data.body || "",
-      tag: data.tag,
-      icon: "/icons/icon-192.png",
-      badge: "/icons/badge-72.png",
-      requireInteraction: true,
-      actions: [
-        { action: "allow", title: "Allow" },
-        { action: "deny", title: "Deny" },
-      ],
-      data: {
-        url: data.url || "/",
-        kind: "permission",
-        key: data.key,
-        permissionId: data.permissionId,
-      },
-    });
-  }
-  return self.registration.showNotification(data.title || "Murmur", {
-    body: data.body || "",
-    tag: data.tag || undefined,
-    icon: "/icons/icon-192.png",
-    badge: "/icons/badge-72.png",
-    requireInteraction: data.kind === "question",
-    data: { url: data.url || "/" },
-  });
-}
-
-function base64UrlToUint8(base64url) {
-  const padding = "=".repeat((4 - (base64url.length % 4)) % 4);
-  const b64 = (base64url + padding).replace(/-/g, "+").replace(/_/g, "/");
-  const raw = atob(b64);
-  const out = new Uint8Array(raw.length);
-  for (let i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
-  return out;
-}
-
-// Push services rotate subscriptions occasionally; re-subscribe and re-register
-// with the hub so the pager survives without a manual re-pair.
-self.addEventListener("pushsubscriptionchange", (event) => {
-  event.waitUntil(
-    (async () => {
-      try {
-        const cfg = await (await fetch("/api/push/config")).json();
-        if (!cfg.publicKey) return;
-        const sub = await self.registration.pushManager.subscribe({
-          userVisibleOnly: true,
-          applicationServerKey: base64UrlToUint8(cfg.publicKey),
-        });
-        await fetch("/api/push/subscribe", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ subscription: sub.toJSON() }),
-        });
-      } catch {
-        // best-effort; the next manual toggle re-pairs
-      }
-    })()
-  );
-});
-
 // Clicking a notification opens its link (routine notifications carry one),
-// otherwise focuses an open Murmur tab or opens the dashboard. The Allow and
-// Deny actions on a permission push answer it directly from the lock screen,
-// through the hub proxy, without opening the app at all.
+// otherwise focuses an open Murmur tab or opens the dashboard.
 self.addEventListener("notificationclick", (event) => {
   const data = event.notification.data || {};
-  if (event.action === "allow" || event.action === "deny") {
-    event.notification.close();
-    const decision = event.action === "allow" ? "allow" : "deny";
-    event.waitUntil(
-      fetch(`/s/${data.key}/api/permission/answer`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ permissionId: data.permissionId, decision }),
-      }).catch(() =>
-        // Couldn't answer headlessly (hub unreachable, cookie expired):
-        // fall back to opening the dashboard on the right session.
-        self.clients.openWindow(data.url || "/")
-      )
-    );
-    return;
-  }
   event.notification.close();
   const url = data.url || "/";
   event.waitUntil(

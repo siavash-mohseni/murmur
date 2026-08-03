@@ -18,7 +18,3 @@ export const HUB_LOCK_FILE = join(STATE_DIR, "hub.lock");
 // use, so the hub never races a session bind. Override with MURMUR_HUB_PORT.
 export const DEFAULT_HUB_PORT = 4747;
 
-// Web Push subscriptions paired to this machine. Hub-owned (the hub is the
-// per-machine surface that outlives sessions), persisted so a hub restart
-// does not silently unsubscribe every phone.
-export const PUSH_SUBS_FILE = join(STATE_DIR, "push-subscriptions.json");

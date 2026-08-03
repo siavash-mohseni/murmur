@@ -19,8 +19,6 @@ Around that pager sits a live dashboard: every tool call, sub-agent, workflow, q
 - [The dashboard: two views](#the-dashboard-two-views)
 - [What it surfaces](#what-it-surfaces)
 - [The fleet](#the-fleet)
-- [Pair your phone](#pair-your-phone)
-- [The relay: off-LAN and hosted replays](#the-relay-off-lan-and-hosted-replays)
 - [Sessions and multi-session](#sessions-and-multi-session)
 - [Sharing and export](#sharing-and-export)
 - [MCP tools](#mcp-tools)
@@ -69,14 +67,13 @@ This is the part that earns its place on your machine.
 
 ## Alert channels
 
-Four channels. The first three are chosen from the toggle in the session header, the fourth from the fleet view's alert menu. They stack, so enable any combination.
+Three channels, chosen from the toggle in the session header (the fleet view has its own menu for the background channel). They stack, so enable any combination.
 
 ![Notification channels](docs/screenshots/alerts-channels.png)
 
 - **In this tab**: the in-page overlay for questions and permissions.
 - **Background**: a service-worker push that fires even when the tab is not focused. It needs a Murmur tab open somewhere, and the preference persists in the browser Cache API.
 - **Native (macOS)**: a native modal alert, opt-in from the chooser. The choice persists across restarts and is shared by every port (stored in `~/.claude/state/murmur/native-alert.pref`).
-- **Push to a device**: real Web Push through the hub. Alerts arrive with every Murmur tab closed, and a permission notification carries Allow and Deny buttons that answer straight from the lock screen. Works in any secure context: the desktop at `127.0.0.1`, or a phone paired against an HTTPS hub. A subscribed device counts as a watcher, so prompts route to Murmur while it is paired, and answering anywhere clears the notification on every device.
 
 The browser tab title also flashes when something needs you, so a background tab is enough to notice.
 
@@ -131,48 +128,7 @@ When a session blocks, it sorts to the top and the "Needs you" inbox surfaces th
   <img src="docs/screenshots/fleet-needs-you.png" alt="Fleet, needs-you state" width="380">
 </p>
 
-The hub observes sessions through the same watcher discipline as everything else: its own mirror connection never counts as a human, so an unwatched session still falls back to the terminal prompt. Only when a fleet tab is actually open (or a push device is paired) does the hub tell sessions their prompts are visible. The hub spawns lazily and exits on its own after half an hour with nothing to do. By default it is loopback-only; LAN exposure is opt-in and token-gated (next section).
-
-## Pair your phone
-
-The fleet view doubles as a phone home screen, and pairing takes one scan:
-
-1. Set `MURMUR_LAN=1` (shell profile) and restart the hub. It now listens on every interface, and every non-loopback request requires the machine token, a random secret minted into `~/.claude/state/murmur/token` (mode 0600).
-2. On the Mac, open the fleet view and press **Pair phone**. The QR code carries the hub's LAN URL with the token in the URL fragment.
-3. Scan it. The phone stores the token in a `SameSite=Strict` cookie and gets the live fleet: blocked sessions first, questions and permissions answerable inline. Add it to the home screen for the standalone-app feel (the manifest and icons ship with the dashboard).
-
-Scan the QR on the Mac (left) and the live fleet is on your phone (right):
-
-<p align="center">
-  <img src="docs/screenshots/pair-phone.png" alt="Pair your phone" height="440">
-  &nbsp;&nbsp;&nbsp;
-  <img src="docs/screenshots/fleet-mobile.png" alt="Fleet on the phone" height="440">
-</p>
-
-Treat the QR like a password: whoever scans it can watch and steer every session on this machine. A device without the token gets the static shell and a pairing screen, nothing else. Alongside the token gate, both the hub and the session servers reject unrecognized `Host` headers (DNS rebinding) and cross-site `Origin`s on mutating requests (CSRF), which hardens the plain loopback setup too.
-
-Lock-screen push on the phone needs a secure context, and plain LAN HTTP is not one. If you run tailscale, `tailscale cert` issues a real certificate: point `MURMUR_TLS_CERT`/`MURMUR_TLS_KEY` at it and set `MURMUR_HUB_HOSTNAME` to the tailnet name, and the hub serves HTTPS, making the phone eligible for Web Push with lock-screen Allow/Deny. Without TLS the phone still gets the full live dashboard over the LAN, just not closed-browser push. A relay behind HTTPS (next section) gives you both without any of that setup.
-
-## The relay: off-LAN and hosted replays
-
-The LAN stops at your front door. The relay takes the pager anywhere: the hub opens an **outbound** WebSocket to a relay server (nothing on your laptop listens beyond loopback) and gets a stable public origin like `https://m-ab12cd34ef.relay.example`. Phone traffic forwards over the tunnel, responses stream back (SSE included), and pairing works from anywhere via the same QR flow, which now leads with the relay origin.
-
-The trust model, in one paragraph: the relay never holds the machine token. Every tunneled request re-enters the hub marked as remote, so the token gate applies to relay traffic exactly as it does on the LAN, and a compromised relay cannot answer questions or approve permissions. Each machine proves ownership of its id with a persistent secret, so nobody can squat your URL and collect your phone's token. On an HTTPS relay the phone is a secure context, so lock-screen push with Allow/Deny works with no TLS setup on the laptop.
-
-The relay ships in this repo (`dist/relay.js`, `murmur-relay`) so you can self-host it on any box with a wildcard DNS record and TLS in front, which is also the trust story: the hosted relay runs the same code you can read. Point the hub at it and restart:
-
-```bash
-# on the server (behind a wildcard cert for *.relay.example)
-MURMUR_RELAY_PUBLIC=https://relay.example MURMUR_RELAY_KEYS=<key> murmur-relay
-
-# on your Mac (shell profile)
-export MURMUR_RELAY=wss://relay.example
-export MURMUR_RELAY_KEY=<key>
-```
-
-Relay server env: `MURMUR_RELAY_PORT` (default 8484), `MURMUR_RELAY_PUBLIC` (public base origin), `MURMUR_RELAY_KEYS` (comma-separated access keys, strongly recommended), `MURMUR_RELAY_DATA` (default `~/.murmur-relay`), `MURMUR_RELAY_MAX_REPLAY` (upload cap, default 5 MB), plus the same `MURMUR_TLS_CERT`/`MURMUR_TLS_KEY` pair the hub takes.
-
-**Hosted replays.** The relay also stores shared session documents: `murmur-export <key> --share [--ttl days]` uploads the summary and prints an expiring link (default 7 days, capped at 30) that renders in any browser, no gist or preview hop needed. Accounts, the cross-machine team fleet, and billing sit on top of this layer and are deliberately not built yet.
+The hub observes sessions through the same watcher discipline as everything else: its own mirror connection never counts as a human, so an unwatched session still falls back to the terminal prompt. Only when a fleet tab is actually open does the hub tell sessions their prompts are visible. The hub spawns lazily and exits on its own after half an hour with nothing to do. It is loopback-only: nothing on this machine listens beyond `127.0.0.1`, so the dashboard is reachable only from the Mac itself.
 
 ## Sessions and multi-session
 
@@ -191,7 +147,7 @@ The same documents render server-side from persisted state, so past sessions exp
 
 **PR receipts.** `murmur-export <key> --receipt` turns a session into a receipt on the pull request it produced: the summary goes into a secret gist (visible to whoever has the link, which is who can read the PR), and a marker-guarded line is appended to the PR body with the gist and a one-click preview. Re-running replaces the previous receipt instead of stacking duplicates. `--pr <n>` targets a specific PR, `--no-pr` skips the append. Needs the GitHub CLI (`gh`). The receipt carries the full trace, including every permission decision, so a reviewer can see not just the diff but how it was made.
 
-**PII redaction.** Every document that leaves the machine is anonymized by default: exports, receipts, hosted replays, and the browser share buttons all scrub emails, API keys and tokens (Anthropic, OpenAI, GitHub, Slack, AWS, Google, JWTs, bearer headers, `password=`/`api_key=` style assignments), home-directory usernames (`/Users/jane` becomes `/Users/USER`, including the bare name and its `-Users-jane-` project-slug form), non-loopback IPv4 addresses, and Luhn-valid card numbers. The rules are conservative on purpose so code, diffs, git SHAs, UUIDs, and timestamps come through untouched, and they cover text only: screenshots inlined in the transcript are not scrubbed, and phone numbers are left alone because diff lines starting with `+` look identical to them. The live dashboard itself is never redacted (it is your own machine). To export full fidelity, pass `--no-redact` to the CLI or `?redact=0` to `/export/<key>.html`.
+**PII redaction.** Every document that leaves the machine is anonymized by default: exports, receipts, and the browser share buttons all scrub emails, API keys and tokens (Anthropic, OpenAI, GitHub, Slack, AWS, Google, JWTs, bearer headers, `password=`/`api_key=` style assignments), home-directory usernames (`/Users/jane` becomes `/Users/USER`, including the bare name and its `-Users-jane-` project-slug form), non-loopback IPv4 addresses, and Luhn-valid card numbers. The rules are conservative on purpose so code, diffs, git SHAs, UUIDs, and timestamps come through untouched, and they cover text only: screenshots inlined in the transcript are not scrubbed, and phone numbers are left alone because diff lines starting with `+` look identical to them. The live dashboard itself is never redacted (it is your own machine). To export full fidelity, pass `--no-redact` to the CLI or `?redact=0` to `/export/<key>.html`.
 
 ## MCP tools
 
@@ -243,9 +199,8 @@ The uninstall reverses everything setup wired in: the hook, the settings registr
 Murmur is read-mostly by design: it observes the session and relays the two things Claude genuinely needs a human for, answers and permission decisions. It never drives the session, so there is nothing it can break.
 
 - **Per-session server.** The MCP child starts a local HTTP server on the first free port from 5173 up, bound to `127.0.0.1`, and writes a port file under `~/.claude/state/murmur/sessions/` so the hook and the browser can find the right instance. Its lifetime is tied to the parent Claude Code process, so it exits with the session.
-- **The hub.** A detached per-machine process (`dist/hub.js`, port 4747) spawned lazily by the first session server that finds none. It tails every session's `/events` with `?role=mirror` (excluded from watcher counts), serves the fleet home and `GET /fleet`, reverse-proxies `/s/<key>/*` to the owning session, and heartbeats `POST /watchers/remote` while a fleet tab is open or a push device is paired, so prompts route to Murmur only when someone can see them. Idle for thirty minutes with no sessions and no clients, it exits.
-- **Auth and guards.** Loopback callers are trusted. Anything else must present the per-machine token (bearer header, `?token=`, or the pairing cookie), minted into `~/.claude/state/murmur/token` on first use. Both servers also reject `Host` headers that do not name the machine and cross-site `Origin`s on mutating requests. Web Push is implemented in-repo on `node:crypto` (RFC 8291 aes128gcm plus RFC 8292 VAPID), with subscriptions persisted in `~/.claude/state/murmur/push-subscriptions.json`.
-- **The relay.** `dist/relay.js` accepts outbound hub tunnels over a hand-rolled RFC 6455 WebSocket (`src/ws.ts`, dependency-free like the push crypto), routes `<machine-id>.<relay-host>` requests over the tunnel with streamed responses, and stores expiring replays. Tunneled requests re-enter the hub with an `x-murmur-tunneled` marker that strips loopback trust, so the machine token is enforced end to end and the relay never holds a credential.
+- **The hub.** A detached per-machine process (`dist/hub.js`, port 4747) spawned lazily by the first session server that finds none. It tails every session's `/events` with `?role=mirror` (excluded from watcher counts), serves the fleet home and `GET /fleet`, reverse-proxies `/s/<key>/*` to the owning session, and heartbeats `POST /watchers/remote` while a fleet tab is open, so prompts route to Murmur only when someone can see them. Idle for thirty minutes with no sessions and no clients, it exits.
+- **Guards.** Both servers bind `127.0.0.1` only. They also reject `Host` headers that do not name the machine (DNS rebinding) and cross-site `Origin`s on mutating requests (CSRF), the two ways a victim's own browser can be turned against a loopback server.
 - **One hook, six events.** Setup registers a single dependency-free Node script, `~/.claude/hooks/murmur-hook.mjs`, under six events. Each invocation posts to the session's local server and silent-fails when Murmur is not listening.
 
 | Event | Subcommand | Role |
@@ -272,13 +227,6 @@ Environment variables, all optional:
 | `OTEL_RESOURCE_ATTRIBUTES` | `team=...,repo=...` style tags, surfaced as session chips. |
 | `MURMUR_HUB=0` | Disable the hub: no fleet home, no lazy hub spawn. Sessions serve their own dashboards as before. |
 | `MURMUR_HUB_PORT` | Hub port override (default 4747). |
-| `MURMUR_LAN=1` | Bind the hub to all interfaces for phone pairing. Non-loopback requests then require the machine token. |
-| `MURMUR_TLS_CERT` / `MURMUR_TLS_KEY` | Serve the hub over HTTPS (paths to a cert and key, e.g. from `tailscale cert`). Needed for Web Push on phones. |
-| `MURMUR_HUB_HOSTNAME` | The hostname your TLS cert names (used in pair URLs and auto-trusted by the Host guard). |
-| `MURMUR_HOST_ALLOW` | Extra comma-separated hostnames the guards should accept as this machine. |
-| `MURMUR_PUSH_CONTACT` | VAPID contact claim sent to push services (default a repo mailto). |
-| `MURMUR_RELAY` | Relay to tunnel through (e.g. `wss://relay.example`). Gives this machine a stable public origin. |
-| `MURMUR_RELAY_KEY` | Access key presented to the relay (when it enforces `MURMUR_RELAY_KEYS`). |
 | `MURMUR_AGENTS_POLL=0` | Disable the `claude agents --json` poll (useful for CI or headless runs). |
 | `MURMUR_WORKFLOW_PREVIEWS=0` | Suppress workflow preview text. |
 | `CLAUDE_MURMUR_PORT` | Manual port override for the hook (debugging). |
@@ -295,10 +243,8 @@ bun run smoke    # smoke tests
 node scripts/mirror-hook-smoke.mjs   # hook -> server -> state round-trip
 node scripts/hook-paths-smoke.mjs    # question/permission blocking paths
 node scripts/hub-smoke.mjs           # hub, fleet, proxy, watcher relay
-node scripts/pager-smoke.mjs         # token gate, pairing, Web Push round trip
 node scripts/export-smoke.mjs        # export CLI, server routes, image inlining
 bun scripts/redact-smoke.ts          # PII redaction rules and share-context walk
-node scripts/relay-smoke.mjs         # tunnel chain, hijack rejection, replays
 node scripts/make-icons.mjs          # regenerate the PWA icon set
 ```
 

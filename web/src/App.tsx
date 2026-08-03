@@ -22,46 +22,18 @@ import { displayName, greeting } from "@/lib/format";
 
 // Which server is this bundle being served by? The hub answers GET /fleet
 // with { hub: true }; a session server 404s it. A /s/<key> path is proof of
-// hub on its own (only the hub serves that route). "locked" means the hub
-// answered 401: this device fetched the shell but holds no valid pairing
-// token, so show the pairing screen instead of a dashboard of failed fetches.
-type Origin = "probe" | "hub" | "session" | "locked";
+// hub on its own (only the hub serves that route).
+type Origin = "probe" | "hub" | "session";
 
 async function probeHub(): Promise<Exclude<Origin, "probe">> {
   try {
     const res = await fetch("/fleet", { signal: AbortSignal.timeout(1500) });
-    if (res.status === 401) return "locked";
     if (!res.ok) return "session";
     const body = (await res.json()) as { hub?: boolean };
     return body.hub === true ? "hub" : "session";
   } catch {
     return "session";
   }
-}
-
-function PairingRequired(): React.JSX.Element {
-  return (
-    <div className="mx-auto flex min-h-[80vh] max-w-md flex-col items-center justify-center gap-4 px-6 text-center">
-      <span
-        aria-hidden
-        className="inline-block h-10 w-10 rounded-xl bg-gradient-to-br from-blue-500 via-indigo-500 to-violet-500 shadow-sm"
-      />
-      <h1 className="text-xl font-semibold text-zinc-50">Pair this device</h1>
-      <p className="text-sm text-zinc-400">
-        Murmur is reachable, but this device holds no pairing token. On the Mac
-        that runs your sessions, open the fleet view and choose{" "}
-        <span className="text-zinc-200">Pair phone</span>, then scan the QR code
-        from here.
-      </p>
-      <button
-        type="button"
-        onClick={() => location.reload()}
-        className="period-pill mt-2"
-      >
-        Retry
-      </button>
-    </div>
-  );
 }
 
 export function App(): React.JSX.Element | null {
@@ -73,10 +45,7 @@ export function App(): React.JSX.Element | null {
     let cancelled = false;
     void probeHub().then((probed) => {
       if (cancelled) return;
-      setOrigin((prev) => {
-        if (probed === "locked") return "locked";
-        return prev === "probe" ? probed : prev;
-      });
+      setOrigin((prev) => (prev === "probe" ? probed : prev));
     });
     return () => {
       cancelled = true;
@@ -86,9 +55,6 @@ export function App(): React.JSX.Element | null {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  if (origin === "locked") {
-    return <PairingRequired />;
-  }
   if (drill) {
     return (
       <SessionDashboard

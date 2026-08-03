@@ -1,12 +1,7 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import { App } from "./App";
-import { initToken } from "./lib/token";
 import "./index.css";
-
-// Adopt a pairing token from the URL fragment before anything fetches, so a
-// phone's very first data request is already authenticated.
-initToken();
 
 // Evict a stale Service Worker before (re)registering. A pre-guard Murmur SW
 // keeps firing a browser notification next to the native alert even when the
