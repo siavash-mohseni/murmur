@@ -37,7 +37,7 @@ When in Murmur mode and dispatching a sub-agent, prepend this reminder to the su
 
 ## Deactivation
 
-Murmur stays on for the rest of the session unless the user says "murmur off" or starts a new session. There is no cleanup on deactivation, the next prompt without the flag is simply business-as-usual.
+Murmur stays on for the rest of the session unless the user says "murmur off" or starts a new session. There is no cleanup on deactivation, the next prompt without the flag is business-as-usual.
 
 ## Multi-session
 

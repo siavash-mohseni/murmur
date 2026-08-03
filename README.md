@@ -2,7 +2,7 @@
 
 **Know the moment your agents need you. Ignore them the rest of the time.**
 
-A Claude Code session blocks silently: a question waits in a terminal you are not looking at, a permission prompt sits under three other windows, and twenty minutes disappear. Murmur is the pager that fixes this. When Claude genuinely needs a human, the question or permission prompt lands somewhere you will actually see it: a card in your browser, a background push, or a native macOS alert. You answer from there and the session unblocks.
+A Claude Code session blocks silently: a question waits in a terminal you are not looking at, a permission prompt sits under three other windows, and twenty minutes disappear. Murmur is the pager that fixes this. When Claude genuinely needs a human, the question or permission prompt lands somewhere you will see it: a card in your browser, a background push, or a native macOS alert. You answer from there and the session unblocks.
 
 Around that pager sits a live dashboard: every tool call, sub-agent, workflow, question, and dollar of the session, mirrored to the browser in real time. Watch it when you want to. The point is that you do not have to.
 
@@ -53,17 +53,15 @@ If anything misbehaves, `bun run doctor` reports the live state of the whole pip
 
 ## The pager: questions and permissions
 
-This is the part that earns its place on your machine.
-
 **Questions.** When Murmur is on, Claude routes questions through `murmur_ask` instead of the terminal. The question renders as a card in the pane, your answer flows back to the blocked tool call, and the session continues. Every pending card shows a live countdown to its timeout. If it lapses unanswered, the card is replaced by a feed entry saying the question timed out and Claude continued, so a decision made without you is never silent.
 
 ![Question modal](docs/screenshots/question-modal.png)
 
-**Permissions.** A hook on the PermissionRequest event routes permission prompts to the same surface, with Allow once / Always allow / Deny, but only when Claude Code would actually show a permission dialog. Allowlisted, auto-approved, and bypass-permissions commands never raise a Murmur modal, so Murmur can never add a prompt the harness would not have shown.
+**Permissions.** A hook on the PermissionRequest event routes permission prompts to the same surface, with Allow once / Always allow / Deny, but only when Claude Code would show a permission dialog. Allowlisted, auto-approved, and bypass-permissions commands never raise a Murmur modal, so Murmur can never add a prompt the harness would not have shown.
 
 ![Permission modal](docs/screenshots/permission-modal.png)
 
-**The watcher gate.** Questions and permissions are only routed to Murmur when someone can actually see them there: a dashboard tab is connected, or the native alert channel is on. Close the tab and leave the session running, and the hooks detect zero watchers and let the terminal prompt through instead, while `murmur_ask` fails fast rather than blocking invisibly. A session with Murmur installed is therefore never less responsive than one without it.
+**The watcher gate.** Questions and permissions are only routed to Murmur when someone can see them there: a dashboard tab is connected, or the native alert channel is on. Close the tab and leave the session running, and the hooks detect zero watchers and let the terminal prompt through instead, while `murmur_ask` fails fast rather than blocking invisibly. A session with Murmur installed is therefore never less responsive than one without it.
 
 ## Alert channels
 
@@ -128,7 +126,7 @@ When a session blocks, it sorts to the top and the "Needs you" inbox surfaces th
   <img src="docs/screenshots/fleet-needs-you.png" alt="Fleet, needs-you state" width="380">
 </p>
 
-The hub observes sessions through the same watcher discipline as everything else: its own mirror connection never counts as a human, so an unwatched session still falls back to the terminal prompt. Only when a fleet tab is actually open does the hub tell sessions their prompts are visible. The hub spawns lazily and exits on its own after half an hour with nothing to do. It is loopback-only: nothing on this machine listens beyond `127.0.0.1`, so the dashboard is reachable only from the Mac itself.
+The hub observes sessions through the same watcher discipline as everything else: its own mirror connection never counts as a human, so an unwatched session still falls back to the terminal prompt. Only when a fleet tab is open does the hub tell sessions their prompts are visible. The hub spawns lazily and exits on its own after half an hour with nothing to do. It is loopback-only: it binds `127.0.0.1`, so the dashboard is reachable only from this Mac.
 
 ## Sessions and multi-session
 
