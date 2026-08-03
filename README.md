@@ -1,95 +1,141 @@
 # Murmur
 
-**Know the moment your agents need you. Ignore them the rest of the time.**
+Murmur is a local pager and live dashboard for Claude Code. It shows questions and permission prompts in your browser, sends optional background or macOS alerts, and lets you answer without finding the blocked terminal.
 
-A Claude Code session blocks silently: a question waits in a terminal you are not looking at, a permission prompt sits under three other windows, and twenty minutes disappear. Murmur is the pager that fixes this. When Claude genuinely needs a human, the question or permission prompt lands somewhere you will see it: a card in your browser, a background push, or a native macOS alert. You answer from there and the session unblocks.
+<p align="center">
+  <img src="docs/screenshots/question-modal.png" alt="A Murmur question with three answer choices and a custom response field">
+</p>
+<p align="center"><em>Answer a Claude Code question from the Murmur dashboard.</em></p>
 
-Around that pager sits a live dashboard: every tool call, sub-agent, workflow, question, and dollar of the session, mirrored to the browser in real time. Watch it when you want to. The point is that you do not have to.
+Use Murmur when you:
 
-![Murmur Operator view](docs/screenshots/hero.png)
-*The Operator view: live KPIs over the full panel stack.*
+- leave long-running Claude Code sessions working in the background
+- run several sessions and need one inbox for anything waiting on you
+- want to inspect progress, context use, token use, cost, and files touched
+- need a shareable record of how a session produced its result
 
----
+The dashboard and session servers run on your machine and bind to `127.0.0.1`.
 
-## Contents
+## Quick start
 
-- [Install](#install)
-- [The pager: questions and permissions](#the-pager-questions-and-permissions)
-- [Alert channels](#alert-channels)
-- [The dashboard: two views](#the-dashboard-two-views)
-- [What it surfaces](#what-it-surfaces)
-- [The fleet](#the-fleet)
-- [Sessions and multi-session](#sessions-and-multi-session)
-- [Sharing and export](#sharing-and-export)
-- [MCP tools](#mcp-tools)
-- [Updating and removing](#updating-and-removing)
-- [Troubleshooting](#troubleshooting)
-- [How it works](#how-it-works)
-- [Configuration](#configuration)
-- [Develop](#develop)
+### 1. Check the requirements
 
----
+You need:
 
-## Install
+- [Git](https://git-scm.com/)
+- [Bun](https://bun.sh/) to install dependencies and build Murmur
+- Node.js 18 or later to run the server and hook
+- the Claude Code `claude` CLI on your `PATH`
+
+The browser dashboard and in-tab alerts run on macOS, Windows, and Linux. Background alerts also require browser notification and service worker support. Native alerts require macOS. Xcode Command Line Tools are optional on macOS. If `swiftc` is unavailable, Murmur uses AppleScript for native alerts.
+
+### 2. Install
 
 ```bash
-git clone https://github.com/siavash-mohseni/murmur.git && cd murmur && bun run setup
+git clone https://github.com/siavash-mohseni/murmur.git
+cd murmur
+bun run setup
 ```
 
-**Prerequisites:** [Bun](https://bun.sh) (build only), Node.js, and the Claude Code `claude` CLI on your `PATH` (setup prints the manual `claude mcp add` line if it is missing). That is the whole list. The hooks are a single dependency-free Node script, so jq and curl are not needed. On macOS, `swiftc` (Xcode Command Line Tools) is optional: when present, setup builds a nicer native alert, and when absent the channel falls back to AppleScript.
+Setup:
 
-`bun run setup` installs dependencies, builds the web bundle and server, then wires everything into `~/.claude`:
+- installs dependencies and builds the web app and server
+- copies one Node hook to `~/.claude/hooks`
+- copies the `murmur` and `progress-dashboard` skills to `~/.claude/skills`
+- backs up and updates `~/.claude/settings.json`
+- backs up and adds a managed Murmur block to `~/.claude/CLAUDE.md`
+- registers the Murmur MCP server with Claude Code at user scope
+- runs an isolated hook-to-dashboard smoke test
 
-- copies the **hook** (`murmur-hook.mjs`) into `~/.claude/hooks` and rewrites its `MURMUR_ROOT` to wherever you cloned the repo,
-- copies the bundled **skills** (`murmur`, `progress-dashboard`) into `~/.claude/skills`,
-- idempotently merges the six hook registrations into `~/.claude/settings.json` (a re-run never duplicates entries, the file is backed up to `settings.json.bak` first, and any legacy bash-hook entries from older installs are migrated out),
-- injects the Murmur sections into `~/.claude/CLAUDE.md` between managed `<!-- BEGIN MURMUR -->` markers (idempotent, backed up to `CLAUDE.md.bak`),
-- registers the MCP server with Claude Code at user scope,
-- finishes with an end-to-end smoke: it boots the built server in an isolated temp `HOME` and drives the real mirror hook through it, so a broken pipeline fails the install instead of showing up later as a silently empty dashboard.
+Keep the cloned directory in place after setup. Claude Code starts the built server from that path. You can rerun setup safely because its configuration changes are idempotent.
 
-Restart Claude Code afterwards. Then send any prompt containing `--murmur`: Claude opens the dashboard and prints its URL once (for example `http://127.0.0.1:5173/`). Murmur stays on until you say "murmur off" or start a new session. For always-on, set `MURMUR_AUTO=1` in your shell and every session behaves as if you typed `--murmur`.
+### 3. Start a new Claude Code session
 
-If anything misbehaves, `bun run doctor` reports the live state of the whole pipeline in one shot: dependencies, build, hook file and registrations, skills, the CLAUDE.md block, MCP registration, every live session server (with connected-tab counts), and the tail of `warnings.log`.
+Close any Claude Code sessions that were open during setup. Start a new session from one of your own project directories, not from the Murmur repository, then send:
 
-## The pager: questions and permissions
+```text
+--murmur Before doing anything else, ask me whether to use option A or option B.
+```
 
-**Questions.** When Murmur is on, Claude routes questions through `murmur_ask` instead of the terminal. The question renders as a card in the pane, your answer flows back to the blocked tool call, and the session continues. Every pending card shows a live countdown to its timeout. If it lapses unanswered, the card is replaced by a feed entry saying the question timed out and Claude continued, so a decision made without you is never silent.
+Claude opens the dashboard, prints its local URL, and sends the question there. Choose an answer in the browser to let the session continue.
 
-![Question modal](docs/screenshots/question-modal.png)
+Murmur intentionally does not intercept questions while you are working inside its own repository. This prevents a development session from talking to an older installed build.
 
-**Permissions.** A hook on the PermissionRequest event routes permission prompts to the same surface, with Allow once / Always allow / Deny, but only when Claude Code would show a permission dialog. Allowlisted, auto-approved, and bypass-permissions commands never raise a Murmur modal, so Murmur can never add a prompt the harness would not have shown.
+Murmur stays active until you say `murmur off` or start a new Claude Code session.
 
-![Permission modal](docs/screenshots/permission-modal.png)
+### 4. Check the installation
 
-**The watcher gate.** Questions and permissions are only routed to Murmur when someone can see them there: a dashboard tab is connected, or the native alert channel is on. Close the tab and leave the session running, and the hooks detect zero watchers and let the terminal prompt through instead, while `murmur_ask` fails fast rather than blocking invisibly. A session with Murmur installed is therefore never less responsive than one without it.
+If the dashboard does not open or activity is missing, run this from the cloned Murmur directory:
 
-## Alert channels
+```bash
+bun run doctor
+```
 
-Three channels, chosen from the toggle in the session header (the fleet view has its own menu for the background channel). They stack, so enable any combination.
+The doctor checks dependencies, the build, installed hooks and skills, Claude Code configuration, MCP registration, running session servers, connected browser tabs, and recent warnings.
 
-![Notification channels](docs/screenshots/alerts-channels.png)
+### Optional: turn Murmur on for every session
+
+Set the environment variable before starting Claude Code:
+
+```bash
+export MURMUR_AUTO=1
+```
+
+Add the same line to your shell profile if you want it to persist across terminal restarts.
+
+## Questions and permission prompts
+
+### Questions
+
+When Murmur is active, Claude uses `murmur_ask` for questions. The question appears in the dashboard, your answer returns to the waiting tool call, and the session continues. A countdown shows when the question will time out. If it expires, the activity feed records the timeout and Claude continues.
+
+### Permissions
+
+Murmur mirrors permission prompts from Claude Code with **Allow once**, **Always allow**, and **Deny** controls.
+
+<p align="center">
+  <img src="docs/screenshots/permission-modal.png" alt="A Murmur permission prompt with allow once, always allow, and deny controls">
+</p>
+
+Murmur does not create permission prompts. It only handles `PermissionRequest` events that Claude Code would otherwise show. Allowlisted, auto-approved, and bypass-permissions commands do not produce a Murmur prompt.
+
+### When the dashboard is closed
+
+Murmur routes a question or permission prompt to the dashboard only when a browser tab is connected or native alerts are enabled. If nobody can see the dashboard, permission prompts remain in the terminal and `murmur_ask` returns immediately so Claude can fall back to its normal question tool.
+
+## Notification channels
+
+Choose one or more channels from the bell menu in the session header.
+
+<p align="center">
+  <img src="docs/screenshots/alerts-channels.png" alt="Murmur notification settings for in-tab, background, and native channels">
+</p>
 
 - **In this tab**: the in-page overlay for questions and permissions.
 - **Background**: a service-worker push that fires even when the tab is not focused. It needs a Murmur tab open somewhere, and the preference persists in the browser Cache API.
-- **Native (macOS)**: a native modal alert, opt-in from the chooser. The choice persists across restarts and is shared by every port (stored in `~/.claude/state/murmur/native-alert.pref`).
+- **Native (macOS)**: a native modal alert. The choice persists across restarts and is shared by every Murmur session.
 
 The browser tab title also flashes when something needs you, so a background tab is enough to notice.
 
-## The dashboard: two views
+## Dashboard views
 
-A toggle in the header switches between two views of the same session. The choice persists.
+Use the header toggle to switch between Owner and Operator views. Murmur remembers your choice.
 
 ### Owner view
 
-The glanceable, plain-language view for when you are not the one driving. A status hero ("what is Claude doing right now"), a timeline of outcomes, an inbox for anything that needs you, and plain-language summaries generated on demand. It celebrates completion and keeps a heartbeat so you can tell at a distance whether work is still moving.
+Owner view answers three questions: what Claude is doing, what it has completed, and whether it needs you. It shows a current-status summary, an outcome timeline, an inbox, and a heartbeat for active work.
 
-![Owner view](docs/screenshots/owner-view.png)
+<p align="center">
+  <img src="docs/screenshots/owner-view.png" alt="Murmur Owner view with current status, outcomes, and inbox">
+</p>
 
 ### Operator view
 
-The expert dashboard. A KPI grid across the top, then the full panel stack below. A period picker (session, today, and wider windows) rescopes the KPIs and panels.
+Operator view shows session metrics and the detailed activity panels. Use the period picker to view the current session, today, or a wider time range.
 
-![Operator view](docs/screenshots/operator-view.png)
+<p align="center">
+  <img src="docs/screenshots/operator-view.png" alt="Murmur Operator view with session metrics and activity panels">
+</p>
 
 | Tile | Shows |
 |---|---|
@@ -102,83 +148,110 @@ The expert dashboard. A KPI grid across the top, then the full panel stack below
 
 **Banners** appear only when relevant: a context-tier warning as you approach the window limit, a stuck-session warning, and a banner when another session is waiting on input.
 
-## What it surfaces
+## Progress and activity
 
-**Panels** (Operator view): Progress (`TaskCreate` / `TaskUpdate` rows grouped into runs and named by goal), Activity (the past-tense trace with inline image thumbnails), Tool breakdown, Sub-agents, Background tasks, Slash commands, Skills loaded, Routines, Memory, and Files touched.
+Operator view includes Progress, Activity, Tool breakdown, Sub-agents, Background tasks, Slash commands, Skills loaded, Routines, Memory, and Files touched.
 
-![Progress panel](docs/screenshots/progress-panel.png)
+Progress rows come from Claude Code `TaskCreate` and `TaskUpdate` calls. Murmur groups them into named runs so you can see completed, active, and pending work.
 
-**Workflows.** When Claude runs a dynamic workflow (multi-agent orchestration), Murmur mirrors it live: the declared phases, done/total counts, the longest-running agent, and the token cost, folded into the session Cost KPI. This reads the workflow's journal on a short poll, with no extra instrumentation in the workflow itself.
+<p align="center">
+  <img src="docs/screenshots/progress-panel.png" alt="Murmur progress panel with completed and active task rows">
+</p>
 
-![Workflows panel](docs/screenshots/workflows-panel.png)
+When Claude runs a multi-agent workflow, Murmur shows its phases, completion counts, longest-running agent, and token cost. Workflow cost is included in the session Cost metric.
+
+<p align="center">
+  <img src="docs/screenshots/workflows-panel.png" alt="Murmur workflow panel with phases, agent progress, and token use">
+</p>
 
 **Dimensions.** Custom usage tags from `OTEL_RESOURCE_ATTRIBUTES` (for example `team`, `repo`) show as session chips, so you can tell at a glance which project or team a session belongs to.
 
 ## The fleet
 
-Run more than one session and Murmur becomes mission control. A small hub process starts automatically with the first session (one per machine, on port 4747) and serves the **fleet home**: every live session as a card, blocked ones first, each showing status, last activity, task progress, context usage, and cost. A global "Needs you" inbox at the top collects every pending question and permission across all sessions, answerable inline. Clicking a card drills into that session's full Operator and Owner dashboard on the same origin, and the Fleet button brings you back.
+When more than one Claude Code session is running, the Fleet page shows every live session in one place. Sessions waiting for input appear first. Each card shows status, last activity, task progress, context use, and estimated cost.
 
-![Fleet home](docs/screenshots/fleet-home.png)
+The **Needs you** inbox collects pending questions and permission prompts from every session. You can answer them without opening each session.
 
-When a session blocks, it sorts to the top and the "Needs you" inbox surfaces the question or permission with the answer controls inline, so you clear it without leaving the fleet.
+<p align="center">
+  <img src="docs/screenshots/fleet-home.png" alt="Murmur Fleet page with live sessions and a shared needs-you inbox">
+</p>
 
 <p align="center">
   <img src="docs/screenshots/fleet-needs-you.png" alt="Fleet, needs-you state" width="380">
 </p>
 
-The hub observes sessions through the same watcher discipline as everything else: its own mirror connection never counts as a human, so an unwatched session still falls back to the terminal prompt. Only when a fleet tab is open does the hub tell sessions their prompts are visible. The hub spawns lazily and exits on its own after half an hour with nothing to do. It is loopback-only: it binds `127.0.0.1`, so the dashboard is reachable only from this Mac.
+The Fleet page is served by one local hub on port 4747. The hub starts when needed and exits after 30 minutes without sessions or browser clients. Its internal connection does not count as a viewer. A fleet browser tab must be open before sessions route prompts there.
 
-## Sessions and multi-session
+### Switching sessions
 
-Each Claude Code session owns its own Murmur instance on its own port (5173, 5174, and so on). The header shows the current session's metadata (working directory, model, start time, staleness). Murmur also lists every live Claude Code session on the machine, including what a waiting session is blocked on, and the session switcher lets one browser tab hop between them (under the hub this is an instant route change). A browse-past entry opens earlier sessions.
+Each Claude Code session runs its own Murmur server on the first available port starting at 5173. The header shows its working directory, model, start time, and last activity. Use the session switcher to move between live sessions or open a persisted earlier session.
 
-![Session switcher](docs/screenshots/session-switcher.png)
+<p align="center">
+  <img src="docs/screenshots/session-switcher.png" alt="Murmur session switcher with live and earlier sessions">
+</p>
+
+## Privacy and local data
+
+- Session servers and the Fleet hub bind to `127.0.0.1`.
+- Murmur rejects unexpected host headers and cross-site mutation requests.
+- Session activity, questions, permission decisions, and token statistics are persisted under `~/.claude/state/murmur/`.
+- The live dashboard shows the original local data. It is not redacted.
+- Export redaction applies to text. Screenshots and phone numbers are not redacted.
+- Setup changes `~/.claude/settings.json` and `~/.claude/CLAUDE.md` only after writing backup files.
+- Uninstall removes Murmur's managed configuration without removing unrelated settings.
+
+Review an export before sharing it if the session contains sensitive screenshots or text that the redaction rules do not cover.
 
 ## Sharing and export
 
-The header has share controls that produce self-contained HTML: a plain-language summary you can open and hand off, and a full session export. Both are single files with no external dependencies, so you can share a snapshot of a run without giving anyone access to your machine.
+The header can produce a plain-language summary or a full session export. Each is a self-contained HTML file with no external runtime dependencies.
 
 The same documents render server-side from persisted state, so past sessions export too and transcript images come inlined as data URIs:
 
 - **HTTP**: `GET /export/<key>.html` on the hub or any session server (`?kind=data` for the dense dump instead of the narrative summary). A session server renders its own key from the live snapshot.
 - **CLI**: `murmur-export` lists every session on disk, `murmur-export <key prefix>` writes the summary next to you, `--data` and `--out` adjust what and where. No server needs to be running.
 
-**PR receipts.** `murmur-export <key> --receipt` turns a session into a receipt on the pull request it produced: the summary goes into a secret gist (visible to whoever has the link, which is who can read the PR), and a marker-guarded line is appended to the PR body with the gist and a one-click preview. Re-running replaces the previous receipt instead of stacking duplicates. `--pr <n>` targets a specific PR, `--no-pr` skips the append. Needs the GitHub CLI (`gh`). The receipt carries the full trace, including every permission decision, so a reviewer can see not just the diff but how it was made.
+**PR receipts.** `murmur-export <key> --receipt` publishes the summary as a secret gist and appends its link to the pull request body. Anyone with the gist URL can read it. Re-running the command replaces the previous receipt. Use `--pr <n>` to select a pull request or `--no-pr` to create only the gist. This command requires the GitHub CLI (`gh`).
 
-**PII redaction.** Every document that leaves the machine is anonymized by default: exports, receipts, and the browser share buttons all scrub emails, API keys and tokens (Anthropic, OpenAI, GitHub, Slack, AWS, Google, JWTs, bearer headers, `password=`/`api_key=` style assignments), home-directory usernames (`/Users/jane` becomes `/Users/USER`, including the bare name and its `-Users-jane-` project-slug form), non-loopback IPv4 addresses, and Luhn-valid card numbers. The rules are conservative on purpose so code, diffs, git SHAs, UUIDs, and timestamps come through untouched, and they cover text only: screenshots inlined in the transcript are not scrubbed, and phone numbers are left alone because diff lines starting with `+` look identical to them. The live dashboard itself is never redacted (it is your own machine). To export full fidelity, pass `--no-redact` to the CLI or `?redact=0` to `/export/<key>.html`.
+**PII redaction.** Exports, receipts, and browser share actions redact emails, supported API keys and tokens, home-directory usernames, non-loopback IPv4 addresses, and Luhn-valid card numbers by default. Code, diffs, git SHAs, UUIDs, timestamps, screenshots, and phone numbers are left unchanged. Use `--no-redact` in the CLI or `?redact=0` in the export URL only when you intend to export the original text.
 
-## MCP tools
+## Configuration
 
-Murmur exposes five tools. In normal use you only call `murmur_open` and `murmur_ask` directly. The hooks and the skill drive the rest.
+All environment variables are optional.
 
-| Tool | Purpose |
+| Variable | Effect |
 |---|---|
-| `murmur_open` | Open the browser surface for this session and return its URL. Optional `port` and `open` (set `open: false` to skip launching a browser). |
-| `murmur_init` | Seed a new run of progress rows. Takes `rows` (string list) and an optional `title`. Each call appends a separate run rather than replacing earlier ones. |
-| `murmur_update` | Update one progress row: `row` (its exact text), `status` (`pending` \| `in_progress` \| `completed` \| `failed`), and an optional `detail`. This is also how you turn a row red, which the harness `TaskUpdate` cannot do. |
-| `murmur_log` | Append a status line to the activity feed, for narrative updates that would otherwise be silent prose. |
-| `murmur_ask` | Ask the user a question in the pane and block for the answer. Same shape as `AskUserQuestion`. Returns `{ ok, answer }`, or `{ ok: false, reason }` so the caller can fall back to `AskUserQuestion`. |
+| `MURMUR_AUTO=1` | Open Murmur on the first prompt of every session. |
+| `OTEL_RESOURCE_ATTRIBUTES` | Add `team=...,repo=...` usage tags to session chips. |
+| `MURMUR_HUB=0` | Disable the Fleet hub. Each session continues to serve its own dashboard. |
+| `MURMUR_HUB_PORT` | Override the Fleet hub port. The default is 4747. |
+| `MURMUR_AGENTS_POLL=0` | Disable polling of `claude agents --json`, which can help in CI or headless runs. |
+| `MURMUR_WORKFLOW_PREVIEWS=0` | Hide workflow preview text. |
+| `CLAUDE_MURMUR_PORT` | Override the session port for hook debugging. |
+| `MURMUR_DEBUG_ENV` | Log Claude-related environment variables at startup for diagnostics. |
 
-**Surface boundary.** Pick the tool by tense and durability: `TaskCreate` / `TaskUpdate` for the operational status of committed work, `murmur_log` for a past-tense trace, `murmur_ask` for discrete answers from the human, and `Write` to `memory/` for durable cross-session preferences.
+`MURMUR_MAC_MODAL` is deprecated. Choose the native channel from the dashboard instead.
 
 ## Updating and removing
 
-**Update.** Pull the latest and re-run setup:
+### Update
+
+From the cloned Murmur directory, pull the latest changes and rerun setup:
 
 ```bash
 git pull && bun run setup
 ```
 
-The re-run is idempotent: it never duplicates hook registrations, replaces the CLAUDE.md block in place, migrates legacy hook entries out, and backs up `settings.json` and `CLAUDE.md` before writing. Restart Claude Code to pick up the rebuilt server.
+Setup replaces its managed files and configuration without duplicating entries. Restart Claude Code after it completes.
 
-**Remove.**
+### Remove
 
 ```bash
 bun run uninstall:murmur          # keep session traces
 bun run uninstall:murmur --purge  # also delete ~/.claude/state/murmur
 ```
 
-The uninstall reverses everything setup wired in: the hook, the settings registrations (yours are left untouched), the managed CLAUDE.md block, the MCP registration, and the skills. It is idempotent and tolerant of partial installs. Afterwards, delete the clone.
+Uninstall removes the hook, Murmur's settings registrations, its managed CLAUDE.md block, the MCP registration, and the copied skills. Other settings remain unchanged. You can delete the cloned directory after uninstall completes.
 
 ## Troubleshooting
 
@@ -189,15 +262,31 @@ The uninstall reverses everything setup wired in: the hook, the settings registr
 | Rows and activity do not appear | Run `bun run doctor`: it checks the hook file and registrations, live session servers, and tails `warnings.log`. |
 | Anything else misbehaves | `bun run doctor` first. Server-side mirror failures are logged to `~/.claude/state/murmur/warnings.log`. |
 | Port 5173 is busy | Murmur automatically binds the next free port (5174, 5175, and so on) and writes a port file so the browser and hooks find it. No action needed. |
-| The native macOS alert looks like a plain dialog | The nicer SwiftUI helper needs `swiftc` at build time. Install the Xcode Command Line Tools and re-run `bun run setup`. Without it the channel still works via AppleScript. |
+| The native macOS alert uses a plain dialog | The SwiftUI helper needs `swiftc` at build time. Install the Xcode Command Line Tools and rerun `bun run setup`. Without it, the channel uses AppleScript. |
 | Setup says `dist/index.js not found` | You ran `bun scripts/setup.ts` without building first. Use `bun run setup`, which builds before wiring. |
 
-## How it works
+## Advanced reference
 
-Murmur is read-mostly by design: it observes the session and relays the two things Claude genuinely needs a human for, answers and permission decisions. It never drives the session, so there is nothing it can break.
+### MCP tools
+
+Murmur exposes five tools. Normal use requires only `murmur_open` and `murmur_ask`. The installed hook and skill call the others when needed.
+
+| Tool | Purpose |
+|---|---|
+| `murmur_open` | Open the browser surface for this session and return its URL. Optional `port` and `open` arguments control the port and browser launch. |
+| `murmur_init` | Add a named run of progress rows. |
+| `murmur_update` | Update one progress row or mark a row as failed. |
+| `murmur_log` | Add a past-tense status line to the activity feed. |
+| `murmur_ask` | Show a question in the dashboard and return the answer to Claude. |
+
+Use `TaskCreate` and `TaskUpdate` for operational progress, `murmur_log` for narrative history, `murmur_ask` for user decisions, and memory files for preferences that must persist across sessions.
+
+### How it works
+
+Murmur observes Claude Code events and returns answers and permission decisions. It does not execute agent work or modify tool inputs.
 
 - **Per-session server.** The MCP child starts a local HTTP server on the first free port from 5173 up, bound to `127.0.0.1`, and writes a port file under `~/.claude/state/murmur/sessions/` so the hook and the browser can find the right instance. Its lifetime is tied to the parent Claude Code process, so it exits with the session.
-- **The hub.** A detached per-machine process (`dist/hub.js`, port 4747) spawned lazily by the first session server that finds none. It tails every session's `/events` with `?role=mirror` (excluded from watcher counts), serves the fleet home and `GET /fleet`, reverse-proxies `/s/<key>/*` to the owning session, and heartbeats `POST /watchers/remote` while a fleet tab is open, so prompts route to Murmur only when someone can see them. Idle for thirty minutes with no sessions and no clients, it exits.
+- **The hub.** A detached process (`dist/hub.js`, port 4747) starts when the first session needs it. It reads each session's event stream, serves the Fleet page, and forwards requests to the owning session. Its mirror connections are excluded from viewer counts. It exits after 30 minutes with no sessions or browser clients.
 - **Guards.** Both servers bind `127.0.0.1` only. They also reject `Host` headers that do not name the machine (DNS rebinding) and cross-site `Origin`s on mutating requests (CSRF), the two ways a victim's own browser can be turned against a loopback server.
 - **One hook, six events.** Setup registers a single dependency-free Node script, `~/.claude/hooks/murmur-hook.mjs`, under six events. Each invocation posts to the session's local server and silent-fails when Murmur is not listening.
 
@@ -214,23 +303,6 @@ Murmur is read-mostly by design: it observes the session and relays the two thin
 - **Feeds.** The hook POSTs to `/sync`. The browser reads a full snapshot from `/state` and streams updates over `/events`. Two server-side polls run without any hook: a workflow mirror (tails the workflow journal) and an agents mirror (`claude agents --json`).
 - **Endpoints.** Question and permission answers come back over `/api/answer`, `/api/cancel`, and `/api/permission/answer`. Owner-view summaries are generated on demand via `/api/owner/summary`. Transcript images are served from `/api/image/`, and `/export/<key>.html` renders a self-contained session document from persisted state (the HTML builders live in `src/export/` and are shared verbatim with the browser Share buttons).
 - **Bundled skills and CLAUDE.md.** Two skills ship in the repo: `murmur` (the activation skill, holding the artifact design system) and `progress-dashboard` (the fallback route for multi-phase progress). Setup also injects three sections into `~/.claude/CLAUDE.md`, sourced from `claude-md/murmur.md`.
-
-## Configuration
-
-Environment variables, all optional:
-
-| Variable | Effect |
-|---|---|
-| `MURMUR_AUTO=1` | Always-on mode: every session auto-opens the dashboard on its first prompt and routes as if `--murmur` was typed. |
-| `OTEL_RESOURCE_ATTRIBUTES` | `team=...,repo=...` style tags, surfaced as session chips. |
-| `MURMUR_HUB=0` | Disable the hub: no fleet home, no lazy hub spawn. Sessions serve their own dashboards as before. |
-| `MURMUR_HUB_PORT` | Hub port override (default 4747). |
-| `MURMUR_AGENTS_POLL=0` | Disable the `claude agents --json` poll (useful for CI or headless runs). |
-| `MURMUR_WORKFLOW_PREVIEWS=0` | Suppress workflow preview text. |
-| `CLAUDE_MURMUR_PORT` | Manual port override for the hook (debugging). |
-| `MURMUR_DEBUG_ENV` | Dump Claude-related env vars on startup (diagnostics). |
-
-`MURMUR_MAC_MODAL` is deprecated and no longer forces the native alert on. Use the channel chooser instead.
 
 ## Develop
 
