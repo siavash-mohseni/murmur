@@ -137,6 +137,14 @@ check("the failure is logged", true, warnings.includes("OAuth access token has e
 // --- inside the cooldown the beat stays unavailable, without respawning ------
 check("failure is held for the cooldown", "unavailable", (await ask("beat-1")).status);
 
+// The reason is what tells the dashboard to keep retrying rather than write the
+// beat off, so an unavailable-with-reason must always carry one.
+check(
+  "held response still carries the reason",
+  true,
+  typeof (await ask("beat-1")).reason === "string"
+);
+
 // --- once the cause is fixed, summaries recover on their own -----------------
 writeFileSync(FLAG, "1");
 await sleep(RETRY_MS + 200);

@@ -13,24 +13,44 @@ export interface SummaryRequest {
 
 const RETRY_MS = 4000;
 const MAX_RETRIES = 15;
+// A reported failure is shared across beats and usually fixable (an expired
+// login), so keep asking on a slow cadence instead of writing the beat off.
+// Without this the server's own retry is unreachable: the hook would never ask
+// again, so summaries stayed dead until a reload even after the fix.
+const FAILURE_RETRY_MS = 15_000;
+const FAILURE_MAX_RETRIES = 40;
 
 interface ServerResult {
   status?: "ready" | "pending" | "unavailable";
   summary?: string;
+  reason?: string;
+}
+
+export interface OwnerSummaries {
+  /** id to its ready summary. Ids still pending or unavailable are absent, so
+   * the caller falls back to the raw text. */
+  summaries: Record<string, string>;
+  /** Set only when the server explains why it could not summarize, which it
+   * does for a failing nested CLI but not for summaries being switched off or
+   * an unusable input. Absent therefore means "nothing worth telling the
+   * user", which is why the banner keys off it. */
+  unavailableReason?: string;
 }
 
 /**
  * @param requests the visible beats that want a summary (id + the text to
  *   summarize). Safe to pass a fresh array each render; work is deduped by id.
- * @returns a map of id to its ready summary. Ids still pending or unavailable
- *   are absent, so the caller falls back to the raw text.
+ * @returns the ready summaries, plus a reason when the server reported a
+ *   fixable failure (see OwnerSummaries).
  */
-export function useOwnerSummaries(requests: SummaryRequest[]): Record<string, string> {
+export function useOwnerSummaries(requests: SummaryRequest[]): OwnerSummaries {
   const [summaries, setSummaries] = useState<Record<string, string>>({});
+  const [unavailableReason, setUnavailableReason] = useState<string | undefined>();
   // Terminal or in-progress status per id, so the effect never re-requests an
   // id that is already done or waiting on a scheduled retry.
   const statusRef = useRef<Map<string, "pending" | "ready" | "unavailable">>(new Map());
   const retriesRef = useRef<Map<string, number>>(new Map());
+  const failuresRef = useRef<Map<string, number>>(new Map());
   const timersRef = useRef<Set<ReturnType<typeof setTimeout>>>(new Set());
 
   // Stable signature so the effect runs only when the set of ids changes.
@@ -62,6 +82,11 @@ export function useOwnerSummaries(requests: SummaryRequest[]): Record<string, st
       if (data.status === "ready" && data.summary) {
         statusRef.current.set(id, "ready");
         setSummaries((prev) => ({ ...prev, [id]: data.summary as string }));
+        // A summary getting through means whatever was broken is working again.
+        // Clear the banner and the failure counts so the other beats, which
+        // failed for the same shared cause, get a fresh run of attempts.
+        setUnavailableReason(undefined);
+        failuresRef.current.clear();
         return;
       }
       if (data.status === "pending") {
@@ -80,6 +105,18 @@ export function useOwnerSummaries(requests: SummaryRequest[]): Record<string, st
         return;
       }
       statusRef.current.set(id, "unavailable");
+      // No reason means summaries are off or the input was unusable, which is
+      // terminal. A reason means something broke that may come back.
+      if (!data.reason) return;
+      setUnavailableReason(data.reason);
+      const failures = (failuresRef.current.get(id) ?? 0) + 1;
+      failuresRef.current.set(id, failures);
+      if (failures > FAILURE_MAX_RETRIES) return;
+      const retry = setTimeout(() => {
+        timers.delete(retry);
+        if (!cancelled) void fetchOne(id, text);
+      }, FAILURE_RETRY_MS);
+      timers.add(retry);
     }
 
     for (const r of requests) {
@@ -106,5 +143,5 @@ export function useOwnerSummaries(requests: SummaryRequest[]): Record<string, st
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [idsKey]);
 
-  return summaries;
+  return { summaries, unavailableReason };
 }

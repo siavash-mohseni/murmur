@@ -694,7 +694,13 @@ export class Store {
     this.deliver({ type: "heartbeat", at: new Date().toISOString() });
   }
 
-  appendWarning(message: string): void {
+  /**
+   * Record a warning. It lands in warnings.log always, and by default also in
+   * the activity feed and as a dashboard toast. Pass `feed: false` for a
+   * condition the UI already reports in its own right, so the same problem does
+   * not also displace what Claude is doing in the owner view's latest line.
+   */
+  appendWarning(message: string, opts?: { feed?: boolean }): void {
     const at = new Date().toISOString();
     try {
       const line = `${at} ${message}\n`;
@@ -702,6 +708,7 @@ export class Store {
     } catch {
       // can't even log; nothing we can do
     }
+    if (opts?.feed === false) return;
     this.addActivity({
       kind: "warn",
       id: randomUUID(),

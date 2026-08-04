@@ -40,6 +40,7 @@ import {
 } from "@/lib/message-structure";
 import type { Activity, ActivityImage, Row, RowStatus } from "@/hooks/useDashboardState";
 import { useOwnerSummaries } from "@/hooks/useOwnerSummaries";
+import { SummariesUnavailableBanner } from "@/components/owner/SummariesUnavailableBanner";
 import { relativeTime } from "@/lib/format";
 import { ownerRowStatusWord, statusTone, toneClasses } from "@/lib/owner-language";
 import { ACTIVE_WINDOW_MS } from "@/lib/owner-status";
@@ -202,7 +203,7 @@ export function OwnerTimeline({
         .filter((r) => r.text.length > 70),
     [visible]
   );
-  const summaries = useOwnerSummaries(summaryRequests);
+  const { summaries, unavailableReason } = useOwnerSummaries(summaryRequests);
 
   return (
     <Panel
@@ -212,6 +213,7 @@ export function OwnerTimeline({
     >
       {items.length === 0 ? undefined : (
         <div className="px-5 py-4">
+          {unavailableReason && <SummariesUnavailableBanner reason={unavailableReason} />}
           {hidden > 0 && (
             <button
               type="button"

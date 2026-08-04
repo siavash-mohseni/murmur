@@ -635,9 +635,13 @@ async function handleOwnerSummary(
   const failure = lastSummaryFailure();
   if (result.status === "unavailable" && failure && !warnedSummaryFailures.has(failure)) {
     warnedSummaryFailures.add(failure);
+    // Log only: the owner view raises its own banner for this, so feeding it
+    // to the activity list too would push the real latest activity out of the
+    // status hero.
     store.appendWarning(
       `Owner-view summaries are failing. The nested claude CLI said: ${failure}. ` +
-        `Summaries shell out to your local Claude Code auth, so an expired login disables them until you sign in again.`
+        `Summaries shell out to your local Claude Code auth, so an expired login disables them until you sign in again.`,
+      { feed: false }
     );
   }
   sendJson(res, 200, result);
