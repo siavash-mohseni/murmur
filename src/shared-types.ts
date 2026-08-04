@@ -148,13 +148,10 @@ export interface TokenStats {
   outputTokens: number;
   cacheReadTokens: number;
   cacheCreationTokens: number;
-  // Subset of the above attributable to turns whose input side
-  // (input + cache read + cache creation) exceeded the long-context
-  // pricing threshold (200K for Sonnet/Opus 4.x on the 1M-context beta).
-  longContextInputTokens: number;
-  longContextOutputTokens: number;
-  longContextCacheReadTokens: number;
-  longContextCacheCreationTokens: number;
+  // Portion of cacheCreationTokens written at the 1-hour TTL, which bills at
+  // twice base input rather than 1.25x. Absent on sessions persisted before
+  // Murmur read the split.
+  cacheCreation1hTokens?: number;
   totalTokens: number;
   lastContextTokens: number;
   contextLimit: number;

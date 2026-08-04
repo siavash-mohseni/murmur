@@ -16,24 +16,22 @@ export function ContextTierBanner({
     return (
       <WarnBanner
         icon={<AlertTriangle className="h-4 w-4" />}
-        title="Approaching long-context pricing tier"
+        title="Context window filling up"
       >
         <div className="mt-1.5 text-xs text-amber-100/90">
-          Context is at {formatTokens(tokens)}. Past 200K, every turn bills at
-          roughly 2× input and 1.5× output. Consider running{" "}
-          <CodeChip>/compact</CodeChip>{" "}
-          soon.
+          Context is at {formatTokens(tokens)}, past 70% of the window. Consider
+          running <CodeChip>/compact</CodeChip> soon so a compaction lands
+          where you choose rather than mid-task.
         </div>
       </WarnBanner>
     );
   }
   return (
-    <DangerBanner icon={<Flame className="h-4 w-4" />} title="Long-context pricing in effect">
+    <DangerBanner icon={<Flame className="h-4 w-4" />} title="Context window nearly full">
       <div className="mt-1.5 text-xs text-rose-100/90">
-        Context is at {formatTokens(tokens)} (over 200K). Every turn now bills
-        at the premium tier. Run{" "}
-        <CodeChip>/compact</CodeChip>{" "}
-        to drop back to standard rates.
+        Context is at {formatTokens(tokens)}, past 90% of the window. Run{" "}
+        <CodeChip>/compact</CodeChip> to free room before the session compacts
+        on its own.
       </div>
     </DangerBanner>
   );

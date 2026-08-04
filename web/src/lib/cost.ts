@@ -5,7 +5,6 @@
 // the web-specific helpers: workflow cost coalescing and display formatting.
 import {
   DEFAULT_PRICING,
-  LONG_CONTEXT_THRESHOLD_TOKENS,
   PRICING,
   costByComponent,
   estimateCost,
@@ -15,14 +14,18 @@ import {
 } from "../../../src/model-caps";
 export {
   DEFAULT_PRICING,
-  LONG_CONTEXT_THRESHOLD_TOKENS,
   PRICING,
   costByComponent,
   estimateCost,
 };
 export type { CostByComponent, CostInputs, Pricing };
 
-export const LONG_CONTEXT_WARN_TOKENS = 160_000;
+// Context-gauge thresholds, as a fraction of the model's own window. These
+// track headroom, not price: every model Murmur knows bills its full window at
+// standard rates, so filling the window costs no more per token, it just leaves
+// less room before a compaction.
+export const CONTEXT_WARN_FRACTION = 0.7;
+export const CONTEXT_CLIFF_FRACTION = 0.9;
 
 // Minimal shape of a mirrored workflow run for cost estimation (see
 // WorkflowMirror in useDashboardState). Kept local to avoid a circular import.

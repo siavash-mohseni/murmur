@@ -11,8 +11,8 @@ import {
   costByComponent,
   estimateWorkflowCost,
   sumWorkflowTokens,
-  LONG_CONTEXT_THRESHOLD_TOKENS,
-  LONG_CONTEXT_WARN_TOKENS,
+  CONTEXT_CLIFF_FRACTION,
+  CONTEXT_WARN_FRACTION,
 } from "@/lib/cost";
 import { filterByPeriod, periodCutoffMs, type Period } from "@/lib/period";
 
@@ -164,22 +164,17 @@ export function useDashboardKpis(
     const contextPct = tokenStats
       ? Math.min(1, tokenStats.lastContextTokens / tokenStats.contextLimit)
       : 0;
-    // Gauge thresholds track the long-context pricing cliff (160K warn, 200K cliff),
-    // not the 1M-context window. For models that cap at 200K (Haiku) 200K is also
-    // the hard context limit, so the cliff and the wall coincide there.
-    const warnPct = tokenStats
-      ? Math.min(1, LONG_CONTEXT_WARN_TOKENS / tokenStats.contextLimit)
-      : 0;
-    const cliffPct = tokenStats
-      ? Math.min(1, LONG_CONTEXT_THRESHOLD_TOKENS / tokenStats.contextLimit)
-      : 0;
+    // Thresholds are a fraction of the model's own window, so the markers mean
+    // the same thing on a 200K Haiku session and a 1M Opus one.
+    const warnPct = tokenStats ? CONTEXT_WARN_FRACTION : 0;
+    const cliffPct = tokenStats ? CONTEXT_CLIFF_FRACTION : 0;
     const contextTier: "ok" | "warn" | "cliff" = tierOverride
       ? tierOverride
       : !tokenStats
         ? "ok"
-        : tokenStats.lastContextTokens >= LONG_CONTEXT_THRESHOLD_TOKENS
+        : contextPct >= CONTEXT_CLIFF_FRACTION
           ? "cliff"
-          : tokenStats.lastContextTokens >= LONG_CONTEXT_WARN_TOKENS
+          : contextPct >= CONTEXT_WARN_FRACTION
             ? "warn"
             : "ok";
     const contextGaugeColor =

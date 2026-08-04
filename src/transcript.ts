@@ -1,17 +1,19 @@
 import { readFileSync, statSync } from "node:fs";
 import type { TokenStats } from "./state.js";
-import {
-  CONTEXT_LIMITS,
-  DEFAULT_CONTEXT_LIMIT,
-  LONG_CONTEXT_THRESHOLD_TOKENS,
-  LONG_CONTEXT_MODELS,
-} from "./model-caps.js";
+import { CONTEXT_LIMITS, DEFAULT_CONTEXT_LIMIT } from "./model-caps.js";
 
 interface Usage {
   input_tokens?: number;
   output_tokens?: number;
   cache_read_input_tokens?: number;
   cache_creation_input_tokens?: number;
+  // Per-TTL split of cache_creation_input_tokens. A 1-hour write bills at
+  // twice base input against 1.25x for a 5-minute one, so the split is the
+  // difference between a right and a materially low cache-write estimate.
+  cache_creation?: {
+    ephemeral_5m_input_tokens?: number;
+    ephemeral_1h_input_tokens?: number;
+  };
 }
 
 interface TranscriptLine {
@@ -69,10 +71,7 @@ export function readTranscriptStats(
   let output = 0;
   let cacheRead = 0;
   let cacheCreation = 0;
-  let lcInput = 0;
-  let lcOutput = 0;
-  let lcCacheRead = 0;
-  let lcCacheCreation = 0;
+  let cacheCreation1h = 0;
   let lastContext = 0;
   let messages = 0;
   let model: string | undefined;
@@ -101,23 +100,13 @@ export function readTranscriptStats(
     const turnOutput = u.output_tokens ?? 0;
     const turnCacheRead = u.cache_read_input_tokens ?? 0;
     const turnCacheCreation = u.cache_creation_input_tokens ?? 0;
+    cacheCreation1h += u.cache_creation?.ephemeral_1h_input_tokens ?? 0;
     input += turnInput;
     output += turnOutput;
     cacheRead += turnCacheRead;
     cacheCreation += turnCacheCreation;
     lastContext = turnInput + turnCacheCreation + turnCacheRead;
     if (msg.model) model = msg.model;
-    // Long-context tiering is intentionally per-turn: it tests this turn's own
-    // model, independent of the session-final `model` used for contextLimit
-    // below. In practice both come from the same final assistant turn.
-    const turnModel = msg.model;
-    const tierEligible = turnModel ? LONG_CONTEXT_MODELS.has(turnModel) : false;
-    if (tierEligible && lastContext > LONG_CONTEXT_THRESHOLD_TOKENS) {
-      lcInput += turnInput;
-      lcOutput += turnOutput;
-      lcCacheRead += turnCacheRead;
-      lcCacheCreation += turnCacheCreation;
-    }
   }
 
   const baseLimit = model ? CONTEXT_LIMITS[model] ?? DEFAULT_CONTEXT_LIMIT : DEFAULT_CONTEXT_LIMIT;
@@ -131,10 +120,7 @@ export function readTranscriptStats(
     outputTokens: output,
     cacheReadTokens: cacheRead,
     cacheCreationTokens: cacheCreation,
-    longContextInputTokens: lcInput,
-    longContextOutputTokens: lcOutput,
-    longContextCacheReadTokens: lcCacheRead,
-    longContextCacheCreationTokens: lcCacheCreation,
+    cacheCreation1hTokens: cacheCreation1h,
     totalTokens: input + output + cacheRead + cacheCreation,
     lastContextTokens: lastContext,
     contextLimit,
