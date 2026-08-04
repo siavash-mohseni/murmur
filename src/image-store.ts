@@ -19,10 +19,10 @@ import {
   unlinkSync,
 } from "node:fs";
 import { join, basename } from "node:path";
-import { SESSIONS_PATH } from "./state.js";
+import { SESSIONS_DIR } from "./paths.js";
 import type { ActivityImage } from "./shared-types.js";
 
-const IMAGE_DIR = join(SESSIONS_PATH, "images");
+const IMAGE_DIR = join(SESSIONS_DIR, "images");
 
 // media_type -> on-disk file extension. Anything not listed is rejected (we
 // only surface raster formats a browser <img> renders inline).

@@ -11,7 +11,7 @@
 // Requires only node (and the built dist/). Run: node scripts/hub-smoke.mjs
 
 import { spawn } from "node:child_process";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -144,6 +144,23 @@ const answerRes = await fetch(`http://127.0.0.1:${HUB_PORT}/s/${KEY_A}/api/permi
 check("proxied permission answer accepted", 200, answerRes.status);
 const askResult = await askPromise;
 check("blocked ask resolved with the proxied decision", "allow", askResult.decision);
+
+// --- transcript images resolve on the hub origin ---
+// The urls in session state carry no /s/<key> prefix, so a drill-down or the
+// fleet home requests them from the hub. If the hub lets them fall through to
+// the SPA shell the response is HTML and every thumbnail renders broken.
+const PNG_1PX = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFAAH/q842iQAAAABJRU5ErkJggg==",
+  "base64"
+);
+const imageName = `${"ab12cd34".repeat(2)}.png`;
+mkdirSync(join(TMP, ".claude", "state", "murmur", "sessions", "images"), { recursive: true });
+writeFileSync(join(TMP, ".claude", "state", "murmur", "sessions", "images", imageName), PNG_1PX);
+const imgRes = await fetch(`http://127.0.0.1:${HUB_PORT}/api/image/${imageName}`);
+check("hub serves a transcript image", 200, imgRes.status);
+check("hub image is a png, not the SPA shell", "image/png", imgRes.headers.get("content-type"));
+const missingRes = await fetch(`http://127.0.0.1:${HUB_PORT}/api/image/${"ff".repeat(16)}.png`);
+check("hub 404s an unknown image", 404, missingRes.status);
 
 // --- disconnect: the gate must release promptly ---
 ctrl.abort();

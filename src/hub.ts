@@ -26,6 +26,7 @@ import { SESSIONS_DIR, HUB_PORT_FILE, DEFAULT_HUB_PORT } from "./paths.js";
 import { listAllSessions, titleFor } from "./discovery.js";
 import { estimateCost } from "./model-caps.js";
 import { hostAllowed, originAllowed } from "./auth.js";
+import { resolveImageFile } from "./image-store.js";
 import { renderSessionHtml } from "./export/render.js";
 import type {
   DashboardState,
@@ -455,6 +456,26 @@ async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
       "cache-control": "no-cache",
     });
     res.end(html);
+    return;
+  }
+  // Transcript images. The store is content-addressed and machine-wide, and
+  // the urls in a session's state carry no /s/<key> prefix, so on the hub
+  // origin (a drill-down or the fleet home) they land here rather than on the
+  // owning session. Without this they fall through to the SPA shell and every
+  // thumbnail renders broken.
+  if (method === "GET" && path.startsWith("/api/image/")) {
+    const resolved = resolveImageFile(path.slice("/api/image/".length));
+    if (!resolved) {
+      sendJson(res, 404, { ok: false, reason: "no such image" });
+      return;
+    }
+    const bytes = await readFile(resolved.path);
+    res.writeHead(200, {
+      "content-type": resolved.mime,
+      "content-length": bytes.byteLength,
+      "cache-control": "public, max-age=31536000, immutable",
+    });
+    res.end(bytes);
     return;
   }
   if (method === "GET" && path === "/events") {
