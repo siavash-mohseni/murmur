@@ -316,6 +316,7 @@ node scripts/hub-smoke.mjs           # hub, fleet, proxy, watcher relay
 node scripts/export-smoke.mjs        # export CLI, server routes, image inlining
 bun scripts/redact-smoke.ts          # PII redaction rules and share-context walk
 bun scripts/pricing-smoke.ts         # cost math against the published price list
+node scripts/summary-smoke.mjs       # owner summary failure reporting and retry
 node scripts/make-icons.mjs          # regenerate the PWA icon set
 ```
 

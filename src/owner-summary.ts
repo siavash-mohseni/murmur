@@ -30,6 +30,12 @@ const MAX_INPUT_CHARS = 1400;
 // use it verbatim (saves a spawn for lines like "Drafting the PR summary").
 const SHORT_CIRCUIT_CHARS = 64;
 const MAX_OUTPUT_CHARS = 140;
+// A failed beat is retried after this long rather than being written off for the
+// life of the process. Nested-CLI failures are usually transient and shared
+// (an expired credential, a timeout, a rate limit), so caching them forever
+// meant one bad minute disabled summaries until the server restarted. The
+// override exists so a test can observe the retry without waiting a minute.
+const FAILURE_RETRY_MS = Number(process.env["MURMUR_SUMMARY_RETRY_MS"]) || 60_000;
 
 const PROMPT_PREFIX =
   "Rewrite this status update from an AI coding assistant as ONE short, " +
@@ -42,11 +48,15 @@ export type SummaryStatus = "ready" | "pending" | "unavailable";
 export interface SummaryResult {
   status: SummaryStatus;
   summary?: string;
+  /** Why summaries are unavailable, when the nested CLI said something useful.
+   * Surfaced so the owner view can distinguish "not configured" from a fixable
+   * failure like an expired login. */
+  reason?: string;
 }
 
 interface CacheEntry {
   summary?: string;
-  failed?: boolean;
+  failedAt?: number;
 }
 
 const cache = new Map<string, CacheEntry>();
@@ -106,6 +116,17 @@ function cleanOutput(raw: string): string {
   return out;
 }
 
+// The nested CLI's own words on its last failure. The CLI reports actionable
+// problems (an expired OAuth token, an unknown model) on stderr and exits
+// non-zero, so dropping stderr turned every one of those into a silent dead
+// feature with nothing in the log to act on.
+let lastFailure: string | null = null;
+
+/** First line of the nested CLI's last failure, or null if it has not failed. */
+export function lastSummaryFailure(): string | null {
+  return lastFailure;
+}
+
 // Spawn the nested CLI for one message, resolving to the summary or null.
 function spawnSummary(bin: string, text: string): Promise<string | null> {
   return new Promise((resolve) => {
@@ -140,7 +161,7 @@ function spawnSummary(bin: string, text: string): Promise<string | null> {
       child = spawn(bin, args, {
         env,
         cwd: isolatedDir ?? tmpdir(),
-        stdio: ["ignore", "pipe", "ignore"],
+        stdio: ["ignore", "pipe", "pipe"],
       });
     } catch {
       resolve(null);
@@ -148,6 +169,7 @@ function spawnSummary(bin: string, text: string): Promise<string | null> {
     }
 
     let out = "";
+    let err = "";
     let done = false;
     const finish = (value: string | null): void => {
       if (done) return;
@@ -167,9 +189,19 @@ function spawnSummary(bin: string, text: string): Promise<string | null> {
     child.stdout?.on("data", (chunk) => {
       out += String(chunk);
     });
-    child.on("error", () => finish(null));
+    child.stderr?.on("data", (chunk) => {
+      if (err.length < 500) err += String(chunk);
+    });
+    child.on("error", (e) => {
+      lastFailure = e instanceof Error ? e.message : String(e);
+      finish(null);
+    });
     child.on("close", (code) => {
       if (code !== 0) {
+        // The CLI prints its diagnosis on either stream depending on the
+        // failure, so fall back to stdout before reporting a bare exit code.
+        lastFailure =
+          firstLine(err) || firstLine(out) || `claude exited with code ${code}`;
         finish(null);
         return;
       }
@@ -177,6 +209,15 @@ function spawnSummary(bin: string, text: string): Promise<string | null> {
       finish(summary.length > 0 ? summary : null);
     });
   });
+}
+
+function firstLine(text: string): string {
+  return (
+    text
+      .split("\n")
+      .map((l) => l.trim())
+      .find((l) => l.length > 0) ?? ""
+  );
 }
 
 function pump(): void {
@@ -188,10 +229,10 @@ function pump(): void {
     active++;
     void spawnSummary(bin, item.text)
       .then((summary) => {
-        cache.set(item.id, summary ? { summary } : { failed: true });
+        cache.set(item.id, summary ? { summary } : { failedAt: Date.now() });
       })
       .catch(() => {
-        cache.set(item.id, { failed: true });
+        cache.set(item.id, { failedAt: Date.now() });
       })
       .finally(() => {
         queued.delete(item.id);
@@ -204,8 +245,9 @@ function pump(): void {
 /**
  * Request a plain-language summary for one beat. Returns the cached line when
  * ready, "pending" while it is being generated, or "unavailable" when summaries
- * are off / the input is unusable. Idempotent per id: repeated calls for a
- * pending id do not enqueue duplicate work.
+ * are off, the input is unusable, or the last attempt failed inside the retry
+ * cooldown. Idempotent per id: repeated calls for a pending id do not enqueue
+ * duplicate work.
  */
 export function requestOwnerSummary(id: string, text: string): SummaryResult {
   const bin = resolveBin();
@@ -213,7 +255,14 @@ export function requestOwnerSummary(id: string, text: string): SummaryResult {
 
   const cached = cache.get(id);
   if (cached?.summary) return { status: "ready", summary: cached.summary };
-  if (cached?.failed) return { status: "unavailable" };
+  if (cached?.failedAt !== undefined) {
+    // Hold the beat back only until the cooldown lapses, so summaries resume
+    // on their own once whatever broke the nested CLI is fixed.
+    if (Date.now() - cached.failedAt < FAILURE_RETRY_MS) {
+      return { status: "unavailable", reason: lastFailure ?? undefined };
+    }
+    cache.delete(id);
+  }
 
   const cleaned = cleanInput(text);
   if (!cleaned) return { status: "unavailable" };

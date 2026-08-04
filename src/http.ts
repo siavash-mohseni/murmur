@@ -10,7 +10,7 @@ import { readNewTranscriptMessages, type ScannedImage } from "./assistant-text.j
 import { saveImage, resolveImageFile } from "./image-store.js";
 import type { ActivityImage } from "./shared-types.js";
 import { isDesktopApp, openInBrowser } from "./browser-open.js";
-import { requestOwnerSummary } from "./owner-summary.js";
+import { lastSummaryFailure, requestOwnerSummary } from "./owner-summary.js";
 import { memoryDirFor, scanMemoryDir } from "./memory.js";
 import { listSessions, listAllSessions } from "./discovery.js";
 import { preferredDashboardUrl } from "./hub-client.js";
@@ -617,8 +617,12 @@ async function handlePermissionAsk(
 // a summary per visible beat; we return the cached line, or "pending" while a
 // worker generates it (the client retries), or "unavailable" so the client
 // stops asking and shows the raw text. Does not touch store state.
+// Reasons already logged, so a dashboard polling every visible beat writes one
+// line per distinct failure instead of one per request.
+const warnedSummaryFailures = new Set<string>();
+
 async function handleOwnerSummary(
-  _store: Store,
+  store: Store,
   req: IncomingMessage,
   res: ServerResponse
 ): Promise<void> {
@@ -628,6 +632,14 @@ async function handleOwnerSummary(
     return;
   }
   const result = requestOwnerSummary(parsed.id, parsed.text);
+  const failure = lastSummaryFailure();
+  if (result.status === "unavailable" && failure && !warnedSummaryFailures.has(failure)) {
+    warnedSummaryFailures.add(failure);
+    store.appendWarning(
+      `Owner-view summaries are failing. The nested claude CLI said: ${failure}. ` +
+        `Summaries shell out to your local Claude Code auth, so an expired login disables them until you sign in again.`
+    );
+  }
   sendJson(res, 200, result);
 }
 
