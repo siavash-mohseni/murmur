@@ -5,11 +5,11 @@ import { formatLocalTime } from "@/lib/format";
 // Routine notifications: a global feed posted by scheduled jobs (the morning
 // review queue, thread triage, future routines) via POST /api/notify or the
 // notify helper. Lives outside any session, so it shows in every pane.
-function post(path: string, id: string): void {
+function post(path: string, id?: string): void {
   void fetch(path, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ id }),
+    body: JSON.stringify(id ? { id } : {}),
   });
 }
 
@@ -51,13 +51,27 @@ export function RoutinesPanel({
             </div>
           </div>
         </div>
+        {list.length > 0 && (
+          <button
+            type="button"
+            className="period-pill text-xs"
+            onClick={() => {
+              if (confirm(`Clear all ${list.length} notifications?`)) post("/api/notify/clear");
+            }}
+          >
+            Clear all
+          </button>
+        )}
       </div>
       {list.length === 0 ? (
         <div className="px-5 py-6 text-sm text-zinc-500">
           Nothing yet. The morning review queue and thread triage post their digests here.
         </div>
       ) : (
-        <div className="divide-y divide-zinc-800">
+        // Capped box: the feed is the last thing on the fleet home and can run
+        // to 200 entries, so it scrolls inside itself instead of pushing the
+        // page down.
+        <div className="max-h-72 overflow-y-auto divide-y divide-zinc-800">
           {list.map((n) => (
             <div
               key={n.id}

@@ -13,7 +13,6 @@ import { BackgroundTasksPanel } from "@/components/panels/BackgroundTasksPanel";
 import { FilesTouchedPanel } from "@/components/panels/FilesTouchedPanel";
 import { MemoryPanel } from "@/components/panels/MemoryPanel";
 import { ProgressPanel } from "@/components/panels/ProgressPanel";
-import { RoutinesPanel } from "@/components/panels/RoutinesPanel";
 import { SkillsLoadedPanel } from "@/components/panels/SkillsLoadedPanel";
 import { SlashCommandsPanel } from "@/components/panels/SlashCommandsPanel";
 import { SubAgentsPanel } from "@/components/panels/SubAgentsPanel";
@@ -323,7 +322,6 @@ export function OperatorView({
           <SlashCommandsPanel activities={activities} period={period} now={now} />
           <SkillsLoadedPanel activities={activities} period={period} now={now} />
         </div>
-        <RoutinesPanel notifications={state?.notifications ?? []} />
         <MemoryPanel entries={state?.memoryEntries ?? []} />
         <FilesTouchedPanel activities={activities} period={period} now={now} />
       </section>

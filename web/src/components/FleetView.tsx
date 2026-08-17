@@ -4,6 +4,7 @@ import { Panel } from "@/components/Panel";
 import { FleetAlerts } from "@/components/FleetAlerts";
 import { PastSessionsModal } from "@/components/PastSessions";
 import { QuestionCard, PermissionCard } from "@/components/owner/OwnerInbox";
+import { RoutinesPanel } from "@/components/panels/RoutinesPanel";
 import { useFleet, type FleetSessionSummary } from "@/hooks/useFleet";
 import { useNow } from "@/hooks/useNow";
 import { formatCost } from "@/lib/cost";
@@ -247,6 +248,8 @@ export function FleetView({ onOpenSession }: { onOpenSession: (key: string) => v
           ))}
         </div>
       )}
+
+      <RoutinesPanel notifications={fleet?.notifications ?? []} />
 
       <PastSessionsModal open={pastOpen} onClose={() => setPastOpen(false)} />
     </div>
