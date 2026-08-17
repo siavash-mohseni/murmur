@@ -27,6 +27,12 @@ import { listAllSessions, titleFor } from "./discovery.js";
 import { estimateCost } from "./model-caps.js";
 import { hostAllowed, originAllowed } from "./auth.js";
 import { resolveImageFile } from "./image-store.js";
+import {
+  readNotifications,
+  setNotificationRead,
+  dismissNotification,
+  clearNotifications,
+} from "./notifications.js";
 import { renderSessionHtml } from "./export/render.js";
 import type {
   DashboardState,
@@ -149,7 +155,10 @@ function fleetSnapshot(): FleetSnapshot {
     if (a.alive !== b.alive) return a.alive ? -1 : 1;
     return (b.lastEventAt ?? "") < (a.lastEventAt ?? "") ? -1 : 1;
   });
-  return { generatedAt: new Date().toISOString(), sessions };
+  // The routines feed lives on the hub home, not in a session pane, so the
+  // fleet snapshot carries it. readNotifications is stat-cached, so this stays
+  // cheap on the debounced broadcast path.
+  return { generatedAt: new Date().toISOString(), sessions, notifications: readNotifications() };
 }
 
 // Minimal SSE client over fetch: the session servers emit exactly
@@ -480,6 +489,32 @@ async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
   }
   if (method === "GET" && path === "/events") {
     handleHubEvents(req, res);
+    return;
+  }
+  // Routines panel actions. The feed is machine-wide, so the hub mutates the
+  // shared file itself rather than proxying to some arbitrary session server
+  // (there may be none live while the notifications are still worth reading).
+  if (method === "POST" && path === "/api/notify/clear") {
+    const removed = clearNotifications();
+    fleetDirty = true;
+    sendJson(res, 200, { ok: true, removed });
+    return;
+  }
+  if (method === "POST" && (path === "/api/notify/read" || path === "/api/notify/dismiss")) {
+    let id = "";
+    try {
+      const chunks: Buffer[] = [];
+      for await (const c of req) chunks.push(c as Buffer);
+      id = String((JSON.parse(Buffer.concat(chunks).toString("utf8")) as { id?: string }).id ?? "");
+    } catch {
+      sendJson(res, 400, { ok: false, reason: "expected {id}" });
+      return;
+    }
+    const ok = path.endsWith("/read") ? setNotificationRead(id, true) : dismissNotification(id);
+    if (ok) {
+      fleetDirty = true;
+    }
+    sendJson(res, ok ? 200 : 404, { ok });
     return;
   }
   if (method === "GET" && path === "/sessions/all") {

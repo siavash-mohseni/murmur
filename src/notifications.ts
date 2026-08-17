@@ -149,6 +149,12 @@ export function setNotificationRead(id: string, read: boolean): boolean {
   return true;
 }
 
+export function clearNotifications(): number {
+  const list = readFromDisk();
+  if (list.length > 0) writeNotifications([]);
+  return list.length;
+}
+
 export function dismissNotification(id: string): boolean {
   const list = readFromDisk();
   const idx = list.findIndex((x) => x.id === id);

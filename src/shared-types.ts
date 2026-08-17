@@ -404,6 +404,9 @@ export interface FleetSessionSummary {
 export interface FleetSnapshot {
   generatedAt: string;
   sessions: FleetSessionSummary[];
+  // Global routine-notifications feed, read from the shared notifications.json.
+  // The Routines panel lives on the fleet home, so the hub ships it here.
+  notifications?: Notification[];
 }
 
 // Events on the hub's own /events stream. The web's fleet hook listens for
